@@ -1,0 +1,33 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-pac-generate - Generate PAC file to stdout or file
+
+
+.SH SYNOPSIS
+\fBlzr pac generate [flags]\fP
+
+
+.SH DESCRIPTION
+Generate a PAC (Proxy Auto-Configuration) file for the default proxy profile and print it to stdout, or write it to a file with --output. Point a browser's auto-config URL at the resulting file to route matching traffic through lazyray.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for generate
+
+.PP
+\fB-o\fP, \fB--output\fP=""
+	write the PAC file to this path instead of stdout
+
+
+.SH EXAMPLE
+.EX
+  lzr pac generate
+  lzr pac generate --output proxy.pac
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-pac(1)\fP

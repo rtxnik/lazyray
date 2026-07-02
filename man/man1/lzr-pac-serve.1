@@ -1,0 +1,38 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-pac-serve - Serve PAC file over HTTP
+
+
+.SH SYNOPSIS
+\fBlzr pac serve [flags]\fP
+
+
+.SH DESCRIPTION
+Start a local HTTP server that serves the PAC file for the default proxy profile. Point a browser's automatic proxy-configuration URL at it, or pass --system to also set that PAC URL as the system proxy (auto-rolled-back when the server stops).
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for serve
+
+.PP
+\fB-p\fP, \fB--port\fP=10810
+	Port to serve PAC file on
+
+.PP
+\fB--system\fP[=false]
+	Set PAC URL as system proxy (auto-rollback on stop)
+
+
+.SH EXAMPLE
+.EX
+  lzr pac serve
+  lzr pac serve --port 8080
+  lzr pac serve --system
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-pac(1)\fP

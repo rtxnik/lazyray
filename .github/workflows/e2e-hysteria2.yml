@@ -1,0 +1,54 @@
+name: e2e-hysteria2
+
+on:
+  push:
+    paths:
+      - "internal/core/hysteria2*.go"
+      - "internal/core/config.go"
+      - "test/e2e/hysteria2/**"
+      - ".github/workflows/e2e-hysteria2.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Hysteria2 e2e (interop)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.4"
+
+      - name: Download & verify xray-core (with geo data)
+        run: |
+          set -euo pipefail
+          ver="v26.3.27"
+          asset="Xray-linux-64.zip"
+          base="https://github.com/XTLS/Xray-core/releases/download/${ver}"
+          curl -fsSL "${base}/${asset}" -o /tmp/xray.zip
+          curl -fsSL "${base}/${asset}.dgst" -o /tmp/xray.dgst
+          want=$(grep -iE 'sha2?-?256' /tmp/xray.dgst | grep -oiE '[0-9a-f]{64}' | head -1 | tr 'A-Z' 'a-z')
+          got=$(sha256sum /tmp/xray.zip | cut -d' ' -f1)
+          [ -n "$want" ] && [ "$want" = "$got" ] || { echo "xray checksum mismatch"; exit 1; }
+          mkdir -p /tmp/xray
+          unzip -o /tmp/xray.zip xray geoip.dat geosite.dat -d /tmp/xray
+          chmod +x /tmp/xray/xray
+          echo "XRAY_BIN=/tmp/xray/xray" >> "$GITHUB_ENV"
+
+      - name: Generate cert and start interop server
+        run: |
+          cd test/e2e/hysteria2
+          ./gen-cert.sh
+          docker compose up -d
+          sleep 4
+
+      - name: Interop e2e
+        run: go test -tags e2e ./test/e2e/hysteria2/ -run TestE2E_Hysteria2_Pinned -count=1 -v
+
+      - name: Teardown
+        if: always()
+        run: cd test/e2e/hysteria2 && (docker compose down || true)

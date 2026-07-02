@@ -1,0 +1,41 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+  settings:
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+  exclusions:
+    presets:
+      - std-error-handling
+      - common-false-positives
+    paths:
+      - testdata
+    rules:
+      # Ignore unchecked Close() — idiomatic Go for deferred cleanup
+      - path: (.+)\.go$
+        text: Error return value of `.+\.Close`
+      # Ignore unchecked fmt output functions — writing to stdout/stderr
+      - path: (.+)\.go$
+        text: Error return value of `fmt\.(Fprint|Fprintf|Fprintln|Sscanf)`
+      # Ignore unchecked os.RemoveAll in cleanup contexts
+      - path: (.+)\.go$
+        text: Error return value of `os\.RemoveAll`
+      # Ignore unchecked os.Setenv, os.Remove, os.WriteFile, os.MkdirAll in test files
+      - path: _test\.go$
+        text: Error return value of `os\.(Setenv|Remove|WriteFile|MkdirAll)`
+      # Ignore unchecked config.SaveServers in test files
+      - path: _test\.go$
+        text: Error return value of `config\.SaveServers`
+      # QF1012 (staticcheck quickfix: WriteString(fmt.Sprintf) -> Fprintf) is a
+      # style suggestion, not a correctness issue; treated as non-actionable noise.
+      - linters:
+          - staticcheck
+        text: "QF1012"

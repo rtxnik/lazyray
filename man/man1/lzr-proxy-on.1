@@ -1,0 +1,28 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-proxy-on - Enable system proxy
+
+
+.SH SYNOPSIS
+\fBlzr proxy on [flags]\fP
+
+
+.SH DESCRIPTION
+Enable the system proxy: point the OS HTTP and SOCKS proxy settings at lazyray's local listener so traffic is routed through the active proxy profile. Run this after starting lazyray to send system-wide traffic through the proxy server.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for on
+
+
+.SH EXAMPLE
+.EX
+  lzr proxy on
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-proxy(1)\fP

@@ -1,0 +1,32 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-stop - Stop the xray proxy and revert system routing
+
+
+.SH SYNOPSIS
+\fBlzr stop [flags]\fP
+
+
+.SH DESCRIPTION
+Stop the running xray-core supervisor and revert any system proxy changes it made.
+
+.PP
+This asks the supervisor to shut down gracefully so it can tear down the SSH tunnel and restore your OS-level system proxy settings; if it does not respond it is hard-killed and the session is self-healed. Running 'lzr stop' when lazyray is not running is a no-op.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for stop
+
+
+.SH EXAMPLE
+.EX
+  # Stop the supervisor and restore system routing
+  lzr stop
+.EE
+
+
+.SH SEE ALSO
+\fBlzr(1)\fP

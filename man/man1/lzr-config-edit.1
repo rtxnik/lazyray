@@ -1,0 +1,29 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-config-edit - Open configuration in editor
+
+
+.SH SYNOPSIS
+\fBlzr config edit [flags]\fP
+
+
+.SH DESCRIPTION
+Open the generated xray config (the xray-core JSON) in your editor, using $EDITOR (falling back to vi). Use it for manual tweaks; lazyray rewrites this file whenever you import or switch a proxy profile, so durable changes belong in the profile store.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for edit
+
+
+.SH EXAMPLE
+.EX
+  lzr config edit
+  EDITOR=nano lzr config edit
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-config(1)\fP

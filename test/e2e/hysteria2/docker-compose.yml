@@ -1,0 +1,15 @@
+services:
+  hysteria:
+    image: tobyxdd/hysteria:v2
+    command: ["server", "-c", "/etc/hysteria/server.yaml"]
+    volumes:
+      - ./server.yaml:/etc/hysteria/server.yaml:ro
+      - ./certs:/etc/hysteria/certs:ro
+    ports:
+      - "8443:8443/udp" # QUIC/UDP — a TCP publish would silently never connect
+    networks: [hy2net]
+  whoami:
+    image: traefik/whoami:v1.10
+    networks: [hy2net]
+networks:
+  hy2net: {}

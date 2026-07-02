@@ -1,0 +1,29 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-config-show - Show current xray configuration
+
+
+.SH SYNOPSIS
+\fBlzr config show [flags]\fP
+
+
+.SH DESCRIPTION
+Print the generated xray config (the xray-core JSON that lazyray builds from your active proxy profile) to stdout. Use it to inspect exactly what xray-core will run, or to copy the config elsewhere.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for show
+
+
+.SH EXAMPLE
+.EX
+  lzr config show
+  lzr config show | jq .
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-config(1)\fP

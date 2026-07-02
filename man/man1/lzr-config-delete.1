@@ -1,0 +1,29 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-config-delete - Delete a profile
+
+
+.SH SYNOPSIS
+\fBlzr config delete  [flags]\fP
+
+
+.SH DESCRIPTION
+Remove the named proxy profile from the profile store. If you delete the default profile, the first remaining profile becomes the new default. Run 'lzr config list' to confirm the exact name.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for delete
+
+
+.SH EXAMPLE
+.EX
+  lzr config delete old-server
+  lzr config delete "work vpn"
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-config(1)\fP

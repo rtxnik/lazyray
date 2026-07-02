@@ -1,0 +1,28 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-update-check - Check for xray-core updates
+
+
+.SH SYNOPSIS
+\fBlzr update check [flags]\fP
+
+
+.SH DESCRIPTION
+Compare the installed xray-core against the pinned release for this platform and report whether an update is available. This does not download anything; run 'lzr update apply' to install.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for check
+
+
+.SH EXAMPLE
+.EX
+  lzr update check
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-update(1)\fP

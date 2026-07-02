@@ -1,0 +1,28 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-tunnel-close - Close all SSH tunnels
+
+
+.SH SYNOPSIS
+\fBlzr tunnel close [flags]\fP
+
+
+.SH DESCRIPTION
+Close every open SSH tunnel that 'lzr tunnel' started. SSH tunnels persist after the command that opened them exits, so use this to tear them all down.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for close
+
+
+.SH EXAMPLE
+.EX
+  lzr tunnel close
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-tunnel(1)\fP

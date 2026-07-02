@@ -1,0 +1,39 @@
+# Build artifacts
+lzr
+lzr.exe
+dist/
+*.out
+
+# Generated docs (build-time only — make completions / make man / make docs)
+completions/
+man/
+
+# Runtime / generated
+*.log
+*.bak
+config.json
+
+# Coverage
+coverage.out
+coverage.html
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.idea/
+.vscode/
+*.swp
+*~
+
+# Project-specific
+PROMPT.md
+create-releases.sh
+
+# Local tool and environment state — never ship to the repo
+.*/
+!.github/
+*-backup*
+.env
+.env.*

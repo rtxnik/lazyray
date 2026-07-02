@@ -1,0 +1,33 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-config-list - List all profiles
+
+
+.SH SYNOPSIS
+\fBlzr config list [flags]\fP
+
+
+.SH DESCRIPTION
+List every proxy profile in the profile store, marking the default with an asterisk. Use it to see what you can switch to or export, and to find the exact profile name other commands expect.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for list
+
+.PP
+\fB--json\fP[=false]
+	Output in JSON format
+
+
+.SH EXAMPLE
+.EX
+  lzr config list
+  lzr config list --json
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-config(1)\fP

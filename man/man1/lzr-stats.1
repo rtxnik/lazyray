@@ -1,0 +1,39 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-stats - Show traffic consumption statistics
+
+
+.SH SYNOPSIS
+\fBlzr stats [flags]\fP
+
+
+.SH DESCRIPTION
+Show traffic consumption recorded by lazyray — today's usage, the current month,
+and the all-time total — as a human-readable report. Pass --json to emit the raw history
+for scripting. Stats accrue while a proxy profile is connected; this command reads the
+stored history and does not require an active connection.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for stats
+
+.PP
+\fB--json\fP[=false]
+	Output in JSON format
+
+
+.SH EXAMPLE
+.EX
+  # Show the traffic report
+  lzr stats
+
+  # Emit the raw history as JSON
+  lzr stats --json
+.EE
+
+
+.SH SEE ALSO
+\fBlzr(1)\fP

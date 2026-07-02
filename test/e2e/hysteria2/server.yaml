@@ -1,0 +1,11 @@
+listen: ":8443"
+tls:
+  cert: /etc/hysteria/certs/server.crt
+  key: /etc/hysteria/certs/server.key
+auth:
+  type: password
+  password: e2e-test-password
+obfs:
+  type: salamander
+  salamander:
+    password: e2e-obfs-password

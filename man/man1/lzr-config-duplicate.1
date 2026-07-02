@@ -1,0 +1,29 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-config-duplicate - Duplicate a profile
+
+
+.SH SYNOPSIS
+\fBlzr config duplicate  [flags]\fP
+
+
+.SH DESCRIPTION
+Copy the named proxy profile to a new "(copy)" profile that is not the default. Use it as a starting point when you want a variant of an existing proxy server without re-importing it. Run 'lzr config list' to confirm the source name.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for duplicate
+
+
+.SH EXAMPLE
+.EX
+  lzr config duplicate home
+  lzr config duplicate "work vpn"
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-config(1)\fP

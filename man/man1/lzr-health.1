@@ -1,0 +1,42 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-health - Run health check on proxy connection
+
+
+.SH SYNOPSIS
+\fBlzr health [flags]\fP
+
+
+.SH DESCRIPTION
+Run a connectivity probe against the default proxy profile.
+
+.PP
+health runs a sequence of checks (xray-core startup, handshake, and exit-IP
+reachability) through the proxy server the profile points to and reports which
+passed. It is a fast connectivity probe — for full installation and config
+diagnostics use 'lzr doctor' instead.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for health
+
+.PP
+\fB--json\fP[=false]
+	Print the health report as JSON instead of human-readable text
+
+
+.SH EXAMPLE
+.EX
+  # Probe the default proxy profile
+  lzr health
+
+  # Machine-readable output for scripts
+  lzr health --json
+.EE
+
+
+.SH SEE ALSO
+\fBlzr(1)\fP

@@ -1,0 +1,28 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-proxy-off - Disable system proxy
+
+
+.SH SYNOPSIS
+\fBlzr proxy off [flags]\fP
+
+
+.SH DESCRIPTION
+Disable the system proxy: remove the OS-level HTTP and SOCKS proxy settings that lazyray applied, restoring direct connections. Run this when you want applications to stop routing through lazyray.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for off
+
+
+.SH EXAMPLE
+.EX
+  lzr proxy off
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-proxy(1)\fP

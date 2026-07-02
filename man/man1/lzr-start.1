@@ -1,0 +1,46 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-start - Start the xray proxy supervisor in the background
+
+
+.SH SYNOPSIS
+\fBlzr start [flags]\fP
+
+
+.SH DESCRIPTION
+Start the xray-core supervisor as a background process using the default proxy profile from your settings.
+
+.PP
+This is the headless counterpart to launching the TUI: it spawns the resident supervisor, waits for it to take the lock, and prints the local SOCKS5/HTTP listen addresses. Use --proxy or --no-proxy to override whether the system proxy is enabled for this session. Running 'lzr start' when lazyray is already running is a no-op.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for start
+
+.PP
+\fB--no-proxy\fP[=false]
+	leave the system proxy untouched for this session, overriding the profile store default
+
+.PP
+\fB--proxy\fP[=false]
+	enable the system proxy for this session, overriding the profile store default
+
+
+.SH EXAMPLE
+.EX
+  # Start in the background using your default profile and settings
+  lzr start
+
+  # Start and force the system proxy on for this session
+  lzr start --proxy
+
+  # Start without touching system proxy settings
+  lzr start --no-proxy
+.EE
+
+
+.SH SEE ALSO
+\fBlzr(1)\fP

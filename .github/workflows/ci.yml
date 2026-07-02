@@ -1,0 +1,187 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }}, Go ${{ matrix.go }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go: ["1.26.4"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ./... -v -count=1
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.4"
+
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Files not formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: "v2.11.4"
+
+  structural-hysteria2:
+    name: Hysteria2 structural (xray -test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.4"
+
+      - name: Download & verify xray-core (with geo data)
+        run: |
+          set -euo pipefail
+          ver="v26.3.27"   # hysteria2-capable; bump deliberately with the structural test
+          asset="Xray-linux-64.zip"
+          base="https://github.com/XTLS/Xray-core/releases/download/${ver}"
+          curl -fsSL "${base}/${asset}" -o /tmp/xray.zip
+          curl -fsSL "${base}/${asset}.dgst" -o /tmp/xray.dgst
+          want=$(grep -iE 'sha2?-?256' /tmp/xray.dgst | grep -oiE '[0-9a-f]{64}' | head -1 | tr 'A-Z' 'a-z')
+          got=$(sha256sum /tmp/xray.zip | cut -d' ' -f1)
+          [ -n "$want" ] && [ "$want" = "$got" ] || { echo "xray checksum mismatch"; exit 1; }
+          mkdir -p /tmp/xray
+          unzip -o /tmp/xray.zip xray geoip.dat geosite.dat -d /tmp/xray
+          chmod +x /tmp/xray/xray
+          echo "XRAY_BIN=/tmp/xray/xray" >> "$GITHUB_ENV"
+
+      - name: Structural hysteria2 config validation
+        run: go test ./internal/core/ -run TestHysteria2Config_AcceptedByXray -count=1 -v
+
+  snapshot-gate:
+    name: Release snapshot + signature gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        with:
+          go-version: "1.26.4"
+
+      - name: Install minisign
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y minisign
+
+      - name: Generate ephemeral minisign key
+        run: |
+          set -euo pipefail
+          key_dir="$(mktemp -d)"
+          # Non-interactive keygen: password prompt + confirmation on stdin.
+          printf 'ci-snapshot\nci-snapshot\n' | minisign -G \
+            -p "${key_dir}/minisign.pub" \
+            -s "${key_dir}/minisign.key"
+          {
+            echo "MINISIGN_SECRET_KEY_FILE=${key_dir}/minisign.key"
+            echo "MINISIGN_PUBLIC_KEY_FILE=${key_dir}/minisign.pub"
+            echo "MINISIGN_PASSWORD=ci-snapshot"
+          } >> "$GITHUB_ENV"
+
+      - name: Build snapshot release with signing
+        uses: goreleaser/goreleaser-action@9ed2f89a662bf1735a48bc8557fd212fa902bebf # v6.1.0
+        with:
+          version: "~> v2.15"
+          args: release --snapshot --clean
+        env:
+          MINISIGN_SECRET_KEY_FILE: ${{ env.MINISIGN_SECRET_KEY_FILE }}
+          MINISIGN_PASSWORD: ${{ env.MINISIGN_PASSWORD }}
+
+      - name: Verify checksums.txt signature with the ephemeral key
+        run: |
+          set -euo pipefail
+          test -f dist/checksums.txt
+          test -f dist/checksums.txt.minisig
+          minisign -V \
+            -p "${MINISIGN_PUBLIC_KEY_FILE}" \
+            -m dist/checksums.txt \
+            -x dist/checksums.txt.minisig
+
+  docs-freshness:
+    name: Docs freshness (generated reference)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.4"
+
+      - name: Regenerate generated docs
+        run: make docs
+
+      - name: Verify committed docs are up to date
+        run: |
+          # git status --porcelain (not `git diff`) so newly generated, never-committed
+          # pages (e.g. a new command) also fail the gate, not just edits to tracked files.
+          dirty=$(git status --porcelain -- man/ completions/ docs/reference/cli/ docs/reference/keybindings.md)
+          if [ -n "$dirty" ]; then
+            echo "::error::Generated docs are stale or uncommitted. Run 'make docs' and commit the result."
+            echo "$dirty"
+            git --no-pager diff -- man/ completions/ docs/reference/cli/ docs/reference/keybindings.md
+            exit 1
+          fi
+
+  vuln-race:
+    name: Vulncheck + race
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.4"
+
+      - name: Race-enabled tests
+        run: go test ./... -race -count=1
+
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...

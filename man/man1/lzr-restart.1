@@ -1,0 +1,32 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-restart - Restart the xray proxy supervisor
+
+
+.SH SYNOPSIS
+\fBlzr restart [flags]\fP
+
+
+.SH DESCRIPTION
+Stop the running xray-core supervisor (if any) and start a fresh one using the current settings.
+
+.PP
+Use this after editing the profile store or switching the default proxy profile so the new configuration takes effect. The system proxy default for the new session comes from your settings, the same as a plain 'lzr start'.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for restart
+
+
+.SH EXAMPLE
+.EX
+  # Apply new settings by restarting the supervisor
+  lzr restart
+.EE
+
+
+.SH SEE ALSO
+\fBlzr(1)\fP

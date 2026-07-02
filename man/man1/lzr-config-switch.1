@@ -1,0 +1,29 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-config-switch - Switch active profile
+
+
+.SH SYNOPSIS
+\fBlzr config switch  [flags]\fP
+
+
+.SH DESCRIPTION
+Make the named proxy profile the default, so subsequent connects and exports use it. Run 'lzr config list' first to see the available profile names.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for switch
+
+
+.SH EXAMPLE
+.EX
+  lzr config switch home
+  lzr config switch "work vpn"
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-config(1)\fP

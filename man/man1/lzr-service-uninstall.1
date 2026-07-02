@@ -1,0 +1,28 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-service-uninstall - Remove xray system service
+
+
+.SH SYNOPSIS
+\fBlzr service uninstall [flags]\fP
+
+
+.SH DESCRIPTION
+Remove the user-scoped system service that starts xray-core on login. This stops xray-core from autostarting but does not remove any proxy profiles or settings.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for uninstall
+
+
+.SH EXAMPLE
+.EX
+  lzr service uninstall
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-service(1)\fP

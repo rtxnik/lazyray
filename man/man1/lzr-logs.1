@@ -1,0 +1,46 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-logs - Show xray log output
+
+
+.SH SYNOPSIS
+\fBlzr logs [flags]\fP
+
+
+.SH DESCRIPTION
+Show the tail of the xray-core log files.
+
+.PP
+logs prints the most recent lines of the xray-core access log, or the error log
+with --error. Use it to see what the engine recorded for the active proxy
+connection when a session misbehaves; pair it with 'lzr doctor' for a full
+diagnosis. If no log file exists yet, logs says so rather than failing.
+
+
+.SH OPTIONS
+\fB-e\fP, \fB--error\fP[=false]
+	Show the xray-core error log instead of the access log
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for logs
+
+.PP
+\fB-n\fP, \fB--lines\fP=50
+	Number of trailing log lines to show (0 shows all)
+
+
+.SH EXAMPLE
+.EX
+  # Last 50 lines of the access log
+  lzr logs
+
+  # Last 200 lines of the error log
+  lzr logs --error --lines 200
+.EE
+
+
+.SH SEE ALSO
+\fBlzr(1)\fP

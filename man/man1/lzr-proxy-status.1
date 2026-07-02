@@ -1,0 +1,28 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-proxy-status - Show system proxy status
+
+
+.SH SYNOPSIS
+\fBlzr proxy status [flags]\fP
+
+
+.SH DESCRIPTION
+Show the current system proxy state: whether the OS HTTP, SOCKS, and PAC proxy settings are enabled and which host and ports they point at. Use it to confirm whether 'lzr proxy on' took effect.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for status
+
+
+.SH EXAMPLE
+.EX
+  lzr proxy status
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-proxy(1)\fP

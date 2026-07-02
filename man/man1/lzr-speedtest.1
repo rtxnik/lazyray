@@ -1,0 +1,46 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-speedtest - Run a download speed test through the proxy
+
+
+.SH SYNOPSIS
+\fBlzr speedtest [flags]\fP
+
+
+.SH DESCRIPTION
+Measure download throughput through the active system proxy. Downloads data from a
+test server for the given duration and reports the observed speed. Requires a running
+connection — start one with 'lzr start' first. Use --duration to lengthen the sample
+and --url to point at your own test file.
+
+
+.SH OPTIONS
+\fB--duration\fP=10
+	Test duration in seconds
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for speedtest
+
+.PP
+\fB--url\fP=""
+	Custom download test URL
+
+
+.SH EXAMPLE
+.EX
+  # Run the default 10-second speed test
+  lzr speedtest
+
+  # Sample for 15 seconds
+  lzr speedtest --duration 15
+
+  # Use a custom download URL
+  lzr speedtest --url http://example.com/testfile
+.EE
+
+
+.SH SEE ALSO
+\fBlzr(1)\fP

@@ -1,0 +1,188 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+    # Generate static shell completions -> completions/{lzr.bash,_lzr,lzr.fish}
+    - make completions
+    # Generate the man page -> man/man1/lzr.1
+    - make docs
+
+builds:
+  - main: .
+    binary: lzr
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE*
+      - README*
+      # Glob srcs (not single concrete paths): with a glob, goreleaser treats
+      # dst as a directory and preserves each file's basename. A single-file src
+      # with a bare dst instead renames every matched file to the literal dst,
+      # so the three completion entries would collide and all but the first
+      # would be silently dropped. The completions glob bundles
+      # completions/{lzr.bash,_lzr,lzr.fish}; the man glob bundles
+      # man/man1/lzr.1.
+      - src: completions/*
+        dst: completions
+        strip_parent: true
+      - src: man/man1/lzr.1
+        dst: man/man1
+        strip_parent: true
+
+checksum:
+  name_template: "checksums.txt"
+
+signs:
+  - id: minisign
+    cmd: minisign
+    # Sign the checksum manifest only. checksums.txt already enumerates every
+    # archive/package SHA-256, so one signature transitively authenticates all
+    # artifacts. Default (prehashed) format — verified by internal/release
+    # (aead.dev/minisign) and the CI snapshot gate; do NOT add -l.
+    args:
+      - "-S"
+      - "-s"
+      - "{{ .Env.MINISIGN_SECRET_KEY_FILE }}"
+      - "-m"
+      - "${artifact}"
+      - "-x"
+      - "${signature}"
+    signature: "${artifact}.minisig"
+    artifacts: checksum
+    # minisign reads the secret-key password from stdin when stdin is not a TTY.
+    stdin: "{{ .Env.MINISIGN_PASSWORD }}"
+
+changelog:
+  sort: asc
+  use: git
+  groups:
+    - title: "Enhancements 🔥"
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "Fixes 🔧"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "Performance ⚡"
+      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: "Tests 🧪"
+      regexp: '^.*?test(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: "CI 🏗️"
+      regexp: '^.*?ci(\([[:word:]]+\))??!?:.+$'
+      order: 4
+    - title: "Docs 📖"
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 5
+    - title: "Refactoring 🔨"
+      regexp: '^.*?refactor(\([[:word:]]+\))??!?:.+$'
+      order: 6
+    - title: "Maintenance ⚙️"
+      regexp: '^.*?(chore|style)(\([[:word:]]+\))??!?:.+$'
+      order: 7
+    - title: "Other"
+      order: 999
+  filters:
+    exclude:
+      - "^Merge"
+
+release:
+  github:
+    owner: rtxnik
+    name: lazyray
+  header: |
+    ## What's Changed 🚀
+
+    TUI manager for Xray proxy — [Installation](https://github.com/rtxnik/lazyray#installation)
+  footer: |
+    **Full Changelog**: [{{ .PreviousTag }}...{{ .Tag }}](https://github.com/rtxnik/lazyray/compare/{{ .PreviousTag }}...{{ .Tag }})
+
+nfpms:
+  - id: packages
+    package_name: lazyray
+    vendor: rtxnik
+    homepage: "https://github.com/rtxnik/lazyray"
+    maintainer: "rtxnik <85287755+rtxnik@users.noreply.github.com>"
+    description: |-
+      lazyray — terminal UI for managing Xray-core proxy configurations.
+      Ships the lzr binary, shell completions, and man page. xray-core and
+      geoip/geosite are downloaded at runtime via `lzr update apply`.
+    license: "MIT"
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    contents:
+      - src: completions/lzr.bash
+        dst: /usr/share/bash-completion/completions/lzr
+        file_info:
+          mode: 0644
+      - src: completions/_lzr
+        dst: /usr/share/zsh/site-functions/_lzr
+        file_info:
+          mode: 0644
+      - src: completions/lzr.fish
+        dst: /usr/share/fish/vendor_completions.d/lzr.fish
+        file_info:
+          mode: 0644
+      - src: man/man1/lzr.1
+        dst: /usr/share/man/man1/lzr.1
+        file_info:
+          mode: 0644
+    scripts:
+      postinstall: "scripts/nfpm/postinstall.sh"
+
+# NOTE: `brews:` (Homebrew formula) is soft-deprecated by goreleaser since
+# v2.10 (removal targeted for v2.16). The packaging deliberately
+# ships a FORMULA, not a cask, so we keep `brews:`. CI pins goreleaser to a
+# version that still supports it (see .github/workflows/release.yml).
+brews:
+  - name: lzr
+    # Formula name matches the binary (lzr), so `brew install rtxnik/tap/lzr`
+    # works and is consistent with the canonical command name. Without this it
+    # would default to the project name (lazyray).
+    repository:
+      owner: rtxnik
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/rtxnik/lazyray"
+    description: "Terminal UI for managing Xray-core proxy configurations"
+    license: "MIT"
+    # Install the completions and man page bundled in the release archive
+    # (see archives.files). goreleaser does NOT auto-install these into the
+    # generated formula, so inject the standard Homebrew install lines.
+    extra_install: |
+      bash_completion.install "completions/lzr.bash" => "lzr"
+      zsh_completion.install "completions/_lzr"
+      fish_completion.install "completions/lzr.fish"
+      man1.install "man/man1/lzr.1"
+    caveats: |
+      xray-core and geoip/geosite databases are NOT bundled; download them with:
+        lzr update apply
+      The background proxy service is user-scoped (never root). Install it with:
+        lzr service install
+      Keep lzr current with:
+        lzr update apply   (xray-core)
+        lzr self-update    (the lzr binary itself)
+    test: |
+      system "#{bin}/lzr", "--version"

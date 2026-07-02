@@ -1,0 +1,28 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-service-install - Install xray as a system service
+
+
+.SH SYNOPSIS
+\fBlzr service install [flags]\fP
+
+
+.SH DESCRIPTION
+Install xray-core as a user-scoped system service so it starts automatically on login. The service runs under your user account and does not require root; if installation fails, run 'lzr doctor' and see TROUBLESHOOTING.md.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for install
+
+
+.SH EXAMPLE
+.EX
+  lzr service install
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-service(1)\fP

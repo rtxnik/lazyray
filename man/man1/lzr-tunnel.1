@@ -1,0 +1,33 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-tunnel - Manage SSH tunnels to server panels
+
+
+.SH SYNOPSIS
+\fBlzr tunnel [name] [flags]\fP
+
+
+.SH DESCRIPTION
+Open or inspect an SSH tunnel to a profile's management panel.
+
+.PP
+This is an SSH tunnel to the server's admin panel — separate from the proxy itself: it does not route your traffic through xray-core and does not change the active proxy profile. With no argument it lists SSH-capable profiles and their tunnel state; with a profile name it opens a persistent tunnel to that profile's panel. Tear tunnels down with 'lzr tunnel close'.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for tunnel
+
+
+.SH EXAMPLE
+.EX
+  lzr tunnel
+  lzr tunnel ru
+  lzr tunnel close
+.EE
+
+
+.SH SEE ALSO
+\fBlzr(1)\fP, \fBlzr-tunnel-close(1)\fP

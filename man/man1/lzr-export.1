@@ -1,0 +1,44 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-export - Export profile as proxy URL
+
+
+.SH SYNOPSIS
+\fBlzr export [name] [flags]\fP
+
+
+.SH DESCRIPTION
+Export a proxy profile as its protocol URL (VLESS, VMess, or Trojan). Without arguments, exports the default profile.
+
+
+.SH OPTIONS
+\fB--all\fP[=false]
+	Export all profiles
+
+.PP
+\fB--encrypt\fP=""
+	Export all profiles encrypted with password
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for export
+
+.PP
+\fB--qr\fP[=false]
+	Display proxy URL as QR code in terminal
+
+
+.SH EXAMPLE
+.EX
+  lzr export
+  lzr export home
+  lzr export --all
+  lzr export --qr
+  lzr export --encrypt "passphrase"
+.EE
+
+
+.SH SEE ALSO
+\fBlzr(1)\fP

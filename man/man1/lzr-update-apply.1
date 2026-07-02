@@ -1,0 +1,33 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-update-apply - Download and install pinned xray-core
+
+
+.SH SYNOPSIS
+\fBlzr update apply [flags]\fP
+
+
+.SH DESCRIPTION
+Download and install the pinned xray-core release for this platform, replacing the current xray-core binary. Use --version to install a specific release tag instead of the one pinned in settings. Run this when 'lzr doctor' reports xray-core is missing or too old.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for apply
+
+.PP
+\fB--version\fP=""
+	xray-core release tag to install (overrides settings.update.xrayVersion)
+
+
+.SH EXAMPLE
+.EX
+  lzr update apply
+  lzr update apply --version v26.3.27
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-update(1)\fP

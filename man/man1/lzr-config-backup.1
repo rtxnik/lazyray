@@ -1,0 +1,29 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-config-backup - Backup configuration to tar.gz archive
+
+
+.SH SYNOPSIS
+\fBlzr config backup [file] [flags]\fP
+
+
+.SH DESCRIPTION
+Write a tar.gz archive of the profile store and the generated xray config (servers.yaml, lazyray.yaml, config.json). Without a path, the archive lands in the backup directory with a timestamped name and old backups are rotated. Use it before risky edits or to move your setup to another machine.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for backup
+
+
+.SH EXAMPLE
+.EX
+  lzr config backup
+  lzr config backup ~/lazyray-backup.tar.gz
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-config(1)\fP

@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        with:
+          go-version: "1.26.4"
+
+      - name: Install minisign
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y minisign
+
+      - name: Write minisign secret key to a temp file
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          key_file="$(mktemp)"
+          printf '%s' "$MINISIGN_SECRET_KEY" > "$key_file"
+          chmod 600 "$key_file"
+          echo "MINISIGN_SECRET_KEY_FILE=$key_file" >> "$GITHUB_ENV"
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@9ed2f89a662bf1735a48bc8557fd212fa902bebf # v6.1.0
+        with:
+          version: "~> v2.15"
+          # --skip=homebrew: the rtxnik/homebrew-tap repo and HOMEBREW_TAP_GITHUB_TOKEN
+          # are not provisioned yet, so publishing the formula would fail the release.
+          # The brews: block in .goreleaser.yml stays configured and is still exercised
+          # by the ci.yml snapshot gate (generate-only). To enable the Homebrew channel,
+          # create the tap + token secret and drop this flag.
+          args: release --clean --skip=homebrew
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

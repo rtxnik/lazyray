@@ -1,0 +1,47 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-import - Import proxy configuration URL or subscription
+
+
+.SH SYNOPSIS
+\fBlzr import [url] [flags]\fP
+
+
+.SH DESCRIPTION
+Import a single proxy URL (VLESS, VMess, Trojan, Shadowsocks, Hysteria2) into a new proxy profile, or import all profiles from a subscription URL with --sub. The first imported profile becomes the default.
+
+
+.SH OPTIONS
+\fB--decrypt\fP=""
+	Decrypt encrypted export with password
+
+.PP
+\fB-f\fP, \fB--force\fP[=false]
+	Import even if UUID already exists
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for import
+
+.PP
+\fB-n\fP, \fB--name\fP=""
+	Profile name (default: from URL fragment)
+
+.PP
+\fB--sub\fP=""
+	Import from subscription URL
+
+
+.SH EXAMPLE
+.EX
+  lzr import vless://uuid@host:port?params#name
+  lzr import vmess://base64...
+  lzr import trojan://pass@host:port?params#name
+  lzr import --sub https://example.com/sub
+.EE
+
+
+.SH SEE ALSO
+\fBlzr(1)\fP

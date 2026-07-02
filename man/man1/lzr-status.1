@@ -1,0 +1,39 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-status - Show xray proxy status
+
+
+.SH SYNOPSIS
+\fBlzr status [flags]\fP
+
+
+.SH DESCRIPTION
+Show whether the xray-core supervisor is running and the health of its local listeners.
+
+.PP
+Reports the supervisor state and PID, uptime, the active proxy profile, the xray-core version, and the local SOCKS5/HTTP listen addresses with an up/down probe of each. Use --json for a machine-readable snapshot; for a full diagnostic sweep use 'lzr doctor' instead.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for status
+
+.PP
+\fB--json\fP[=false]
+	output a machine-readable JSON status snapshot
+
+
+.SH EXAMPLE
+.EX
+  # Human-readable status
+  lzr status
+
+  # Machine-readable snapshot
+  lzr status --json
+.EE
+
+
+.SH SEE ALSO
+\fBlzr(1)\fP
