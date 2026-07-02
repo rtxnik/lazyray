@@ -153,6 +153,6 @@ metadata, though the credential files within are `0600`).
 ## Verifying a release
 
 See the [Installation](README.md#installation) section of the README for how the
-Homebrew, Linux-package, and `install.sh` paths verify artifacts, including the
+Linux-package and `install.sh` paths verify artifacts, including the
 `install.sh --require-signature` flag that makes a missing `minisign` a hard
 failure.

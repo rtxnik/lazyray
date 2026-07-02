@@ -21,53 +21,20 @@
 
 ## Features
 
-### 🔌 Multi-Protocol Support
-
-VLESS, VMess, Trojan, Shadowsocks — import via URL or subscription, manage in one place.
-
-### 🚀 Full TUI Experience
-
-Three-panel layout with profiles, status, and logs. Modal dialogs for editing, health checks, QR export. Keyboard-driven navigation.
-
-### 🌐 System Proxy Integration
-
-`lzr proxy on/off/status` — configure OS-level proxy on macOS, Linux (GNOME/KDE), and Windows. PAC auto-configuration included.
-
-### 🔒 DNS Security
-
-DNS-over-HTTPS and DNS-over-TLS with per-profile conditional routing rules.
-
-### 📊 Traffic Monitoring
-
-Real-time upload/download stats, persistent traffic history, speed testing through proxy.
-
-### 🔄 Subscription Management
-
-Import from subscription URLs with auto-refresh. Batch latency testing and auto-sort.
-
-### 🎨 Customizable
-
-Multiple themes (Gruvbox, Nord, Catppuccin, Solarized), custom keybindings, responsive layout for small terminals.
-
-### 💻 Cross-Platform
-
-macOS (launchd), Linux (systemd), Windows (Task Scheduler). System service install/uninstall.
+- **Multi-protocol** — VLESS, VMess, Trojan, Shadowsocks, Hysteria2; import via URL or subscription.
+- **Full TUI** — three-panel layout (profiles, status, logs), modal editing, health checks, QR export, keyboard-driven.
+- **System proxy** — `lzr proxy on/off/status` on macOS, Linux (GNOME/KDE), and Windows; PAC auto-configuration.
+- **DNS security** — DNS-over-HTTPS and DNS-over-TLS with per-profile routing rules.
+- **Traffic monitoring** — real-time upload/download stats, persistent history, speed testing through the proxy.
+- **Subscriptions** — import from subscription URLs with auto-refresh; batch latency testing and auto-sort.
+- **Customizable** — themes (Gruvbox, Nord, Catppuccin, Solarized), custom keybindings, responsive layout.
+- **Cross-platform** — macOS (launchd), Linux (systemd), Windows (Task Scheduler); service install/uninstall.
 
 ## Installation
 
-The binary is named **`lzr`**. Every published release is shipped with a
-minisign-signed checksum manifest (`checksums.txt` + `checksums.txt.minisig`),
-and the install paths below verify it before installing.
-
-### Homebrew (macOS / Linux)
-
-```bash
-brew install rtxnik/tap/lzr
-```
-
-Homebrew downloads from the signed GitHub release and the formula is published
-from our tap (`rtxnik/homebrew-tap`). xray-core is **not** bundled — fetch it
-once after install with `lzr update apply`.
+The binary is named **`lzr`**. Every release ships a minisign-signed checksum
+manifest (`checksums.txt` + `checksums.txt.minisig`); the install paths below
+verify it before installing.
 
 ### Linux packages (deb / rpm / apk)
 
@@ -81,9 +48,9 @@ sudo apk add --allow-untrusted lazyray_<version>_linux_amd64.apk   # Alpine
 ```
 
 Packages install the `lzr` binary, shell completions, and the man page. They do
-**not** register or start any background service and never require root for
-config — the proxy service is user-scoped (`lzr service install`, run as your
-user). After installing, run `lzr update apply` to fetch xray-core.
+not register or start any background service and never require root for config —
+the proxy service is user-scoped (`lzr service install`, run as your user).
+After installing, fetch xray-core with `lzr update apply`.
 
 ### Install script (Linux / macOS)
 
@@ -91,18 +58,18 @@ user). After installing, run `lzr update apply` to fetch xray-core.
 curl -fsSL https://raw.githubusercontent.com/rtxnik/lazyray/main/scripts/install.sh | sh
 ```
 
-The script **always** verifies the archive's SHA-256 against the signed
-`checksums.txt`. If the `minisign` tool is present on your machine it
-**additionally** verifies `checksums.txt.minisig` against the public key
-embedded in the script — the full supply-chain check. If `minisign` is absent
-the script prints a loud warning and continues at checksum-only level.
+The script always verifies the archive's SHA-256 against the signed
+`checksums.txt`. If `minisign` is present on your machine it additionally
+verifies `checksums.txt.minisig` against the public key embedded in the
+script — the full supply-chain check. If `minisign` is absent the script
+prints a loud warning and continues at checksum-only level.
 
-> **Trust model (honest note):** a bare `curl … | sh` *without* `minisign`
-> installed gives only checksum-level integrity (protects against corruption,
-> MITM-beyond-TLS, and tampered mirrors) — **not** against a compromised
-> release. The strongly-verified paths are Homebrew, the Linux packages, and
-> `install.sh` with `minisign` present. To make a missing `minisign` a hard
-> error instead of a warning:
+> **Trust model:** a bare `curl … | sh` without `minisign` gives only
+> checksum-level integrity (protects against corruption, MITM-beyond-TLS, and
+> tampered mirrors) — **not** against a compromised release. The
+> strongly-verified paths are the Linux packages and `install.sh` with
+> `minisign` present. To make a missing `minisign` a hard error instead of a
+> warning:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rtxnik/lazyray/main/scripts/install.sh \
@@ -162,39 +129,25 @@ A few terms recur throughout lazyray and its docs:
 
 ## CLI Commands
 
+The everyday core:
+
 | Command | Description |
 |---------|-------------|
 | `lzr` | Launch interactive TUI |
-| `lzr start [--background]` | Start xray proxy |
-| `lzr stop` | Stop xray proxy |
-| `lzr restart` | Restart xray proxy |
-| `lzr status [--json]` | Show proxy status |
-| `lzr health [--json]` | Run health check |
-| `lzr ip [--json]` | Show proxy vs direct IP |
-| `lzr import <url>` | Import proxy URL |
-| `lzr import --sub <url>` | Import from subscription |
-| `lzr export [name] [--qr]` | Export URL or QR code |
-| `lzr config list` | List profiles |
-| `lzr config switch <name>` | Switch active profile |
-| `lzr config show` | Show xray config |
-| `lzr config edit` | Open config in $EDITOR |
-| `lzr config backup` | Backup all configs |
-| `lzr config restore <path>` | Restore from backup |
-| `lzr config delete <name>` | Delete a profile |
-| `lzr config duplicate <name>` | Duplicate a profile |
+| `lzr start` / `lzr stop` / `lzr restart` | Control the xray proxy |
+| `lzr status` / `lzr health` / `lzr ip` | Status, health check, exit IP (`--json` supported) |
+| `lzr import <url>` | Import a proxy URL (`--sub <url>` for subscriptions) |
+| `lzr export [name] [--qr]` | Export a profile as URL or QR code |
+| `lzr config <list\|switch\|show\|edit\|...>` | Manage profiles and configs |
 | `lzr test [name] [--all]` | Test connection / batch latency |
-| `lzr speedtest` | Download speed test through proxy |
-| `lzr stats` | Show traffic statistics |
-| `lzr logs` | Tail xray logs |
-| `lzr proxy on/off/status` | System proxy management |
-| `lzr pac generate` | Generate PAC file |
-| `lzr pac serve [--system]` | Serve PAC over HTTP |
-| `lzr tunnel <name>` | Open SSH tunnel |
-| `lzr tunnel close` | Close all tunnels |
-| `lzr update check` | Check for xray-core updates |
-| `lzr update apply` | Download and install update |
-| `lzr service install/uninstall` | Manage autostart service |
-| `lzr self-update` | Update lazyray to latest release |
+| `lzr proxy <on\|off\|status>` | System proxy management |
+| `lzr update <check\|apply>` | Manage the xray-core engine |
+| `lzr service <install\|uninstall>` | Manage the autostart service |
+| `lzr self-update` | Update lazyray itself |
+| `lzr doctor` | Full diagnostic sweep |
+
+More (`speedtest`, `stats`, `logs`, `pac`, `tunnel`, every flag) — in the
+generated [command reference](docs/reference/cli/lzr.md), or `lzr --help`.
 
 ### Hysteria2 links
 
@@ -241,12 +194,8 @@ problems in one pass.
 ## Requirements
 
 - [Xray-core](https://github.com/XTLS/Xray-core) — downloaded automatically via `lzr update apply`, pinned to a known-good version (default `v26.3.27`); override with `lzr update apply --version <tag>`. The download is verified against XTLS's published `.dgst` SHA-256 checksum before it is executed.
-- Go 1.24+ (building from source only)
+- Go 1.26+ (building from source only)
 
 ## License
 
 [MIT](LICENSE)
-
-<p align="center">
-  <img src="assets/banner.png" alt="lazyray — terminal proxy manager" width="700">
-</p>
