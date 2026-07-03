@@ -24,10 +24,14 @@ gh api -X PUT "repos/$REPO/vulnerability-alerts" >/dev/null
 gh api -X PUT "repos/$REPO/automated-security-fixes" >/dev/null
 
 echo "==> Rulesets"
+if ! rulesets_json="$(gh api "repos/$REPO/rulesets" 2>/dev/null)"; then
+  echo "ERROR: cannot list rulesets (auth/network)" >&2
+  exit 1
+fi
 for name in main tags; do
   file="$GOV/rulesets/$name.json"
   rname="$(jq -r .name "$file")"
-  id="$(gh api "repos/$REPO/rulesets" --jq ".[] | select(.name == \"$rname\") | .id" 2>/dev/null)"
+  id="$(jq -r --arg n "$rname" '.[] | select(.name == $n) | .id' <<<"$rulesets_json")"
   if [ -n "$id" ]; then
     gh api -X PUT "repos/$REPO/rulesets/$id" --input "$file" >/dev/null
     echo "updated ruleset $rname (id $id)"

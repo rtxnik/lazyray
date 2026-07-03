@@ -4,6 +4,7 @@
 #   ci   - rulesets only; anonymous REST reads (public repo), needs no token
 #   full - also settings, release environment, secret homing, vuln alerts
 #          (requires owner-authenticated gh)
+# Exit codes: 0 = OK, 1 = drift detected, 2 = could not verify (read failure)
 set -uo pipefail
 
 MODE="${1:-full}"
@@ -12,18 +13,20 @@ API="https://api.github.com/repos/$REPO"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GOV="$HERE/../../.github/governance"
 FAIL=0
+ERR=0
 
 err() { echo "DRIFT: $*" >&2; FAIL=1; }
+rerr() { echo "ERROR: $*" >&2; ERR=1; }
 
 # Rulesets on public repos are readable anonymously. Plain curl sidesteps the
 # Actions-token permission question entirely (installation tokens 403 on the
 # rulesets endpoints regardless of repo visibility). A fetch failure is
-# reported as an ERROR, never conflated with "ruleset missing".
-fetch() { curl -fsS -H "Accept: application/vnd.github+json" "$1"; }
+# reported as an ERROR (exit 2), never conflated with "ruleset missing".
+fetch() { curl -fsS --retry 3 --retry-delay 30 -H "Accept: application/vnd.github+json" "$1"; }
 
 if ! RULESETS="$(fetch "$API/rulesets")"; then
   echo "ERROR: cannot read rulesets list for $REPO (network/HTTP failure)" >&2
-  exit 1
+  exit 2
 fi
 
 check_ruleset() {
@@ -35,8 +38,7 @@ check_ruleset() {
     return
   fi
   if ! live="$(fetch "$API/rulesets/$id")"; then
-    echo "ERROR: cannot read ruleset '$rname' (id $id)" >&2
-    FAIL=1
+    rerr "cannot read ruleset '$rname' (id $id)"
     return
   fi
   want="$(jq -S . "$file")"
@@ -117,6 +119,10 @@ if [ "$MODE" = "full" ]; then
     || err "vulnerability alerts disabled"
 fi
 
+if [ "$ERR" -ne 0 ]; then
+  echo "repo-governance check: ERROR (could not verify)"
+  exit 2
+fi
 if [ "$FAIL" -ne 0 ]; then
   echo "repo-governance check: FAIL"
   exit 1
