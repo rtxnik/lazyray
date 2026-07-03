@@ -14,13 +14,14 @@ gh api -X PATCH "repos/$REPO" \
   -F allow_rebase_merge=false \
   -F delete_branch_on_merge=true \
   -F has_discussions=true \
+  -F has_issues=true \
   -f squash_merge_commit_title=PR_TITLE \
   -f squash_merge_commit_message=PR_BODY >/dev/null
 echo "settings applied"
 
 echo "==> Vulnerability alerts + automated security fixes"
-gh api -X PUT "repos/$REPO/vulnerability-alerts"
-gh api -X PUT "repos/$REPO/automated-security-fixes"
+gh api -X PUT "repos/$REPO/vulnerability-alerts" >/dev/null
+gh api -X PUT "repos/$REPO/automated-security-fixes" >/dev/null
 
 echo "==> Rulesets"
 for name in main tags; do
