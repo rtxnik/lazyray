@@ -5,6 +5,9 @@
 #   full - also settings, release environment, secret homing, vuln alerts
 #          (requires owner-authenticated gh)
 # Exit codes: 0 = OK, 1 = drift detected, 2 = could not verify (read failure)
+# Note: bypass_actors are NOT visible to anonymous reads (the API returns
+# null); ci mode therefore checks everything except bypass_actors, and full
+# mode verifies them exactly via authenticated gh.
 set -uo pipefail
 
 MODE="${1:-full}"
@@ -41,16 +44,29 @@ check_ruleset() {
     rerr "cannot read ruleset '$rname' (id $id)"
     return
   fi
-  want="$(jq -S . "$file")"
+  want="$(jq -S 'del(.bypass_actors)' "$file")"
   if ! jq -e --argjson want "$want" '
-      {name, target, enforcement, conditions, rules, bypass_actors}
+      {name, target, enforcement, conditions, rules}
       | contains($want)
         and (.conditions == $want.conditions)
         and ((.rules | length) == ($want.rules | length))
-        and ((.bypass_actors | length) == ($want.bypass_actors | length))
         and (.enforcement == "active")
     ' <<<"$live" >/dev/null; then
     err "ruleset '$rname' diverges from $file"
+  fi
+
+  # bypass_actors are redacted (null) on anonymous reads; verify them
+  # exactly, authenticated, in full mode only.
+  if [ "$MODE" = "full" ]; then
+    local want_b live_b
+    want_b="$(jq -S '.bypass_actors' "$file")"
+    if ! live_b="$(gh api "repos/$REPO/rulesets/$id" --jq '.bypass_actors // []' 2>/dev/null | jq -S .)"; then
+      rerr "cannot read bypass_actors for ruleset '$rname' (auth?)"
+      return
+    fi
+    if [ "$live_b" != "$want_b" ]; then
+      err "ruleset '$rname' bypass_actors diverge (want=$want_b live=$live_b)"
+    fi
   fi
 
   # jq `contains` is subset-based: it lets a live array gain elements over
