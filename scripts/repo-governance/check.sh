@@ -1,31 +1,49 @@
 #!/usr/bin/env bash
 # Verify live repo governance matches the committed etalon.
 # Usage: check.sh [ci|full]
-#   ci   - rulesets only (works with the read-only Actions token)
+#   ci   - rulesets only; anonymous REST reads (public repo), needs no token
 #   full - also settings, release environment, secret homing, vuln alerts
+#          (requires owner-authenticated gh)
 set -uo pipefail
 
 MODE="${1:-full}"
 REPO="${GOVERNANCE_REPO:-rtxnik/lazyray}"
+API="https://api.github.com/repos/$REPO"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GOV="$HERE/../../.github/governance"
 FAIL=0
 
 err() { echo "DRIFT: $*" >&2; FAIL=1; }
 
+# Rulesets on public repos are readable anonymously. Plain curl sidesteps the
+# Actions-token permission question entirely (installation tokens 403 on the
+# rulesets endpoints regardless of repo visibility). A fetch failure is
+# reported as an ERROR, never conflated with "ruleset missing".
+fetch() { curl -fsS -H "Accept: application/vnd.github+json" "$1"; }
+
+if ! RULESETS="$(fetch "$API/rulesets")"; then
+  echo "ERROR: cannot read rulesets list for $REPO (network/HTTP failure)" >&2
+  exit 1
+fi
+
 check_ruleset() {
   local file="$1" rname id live want
   rname="$(jq -r .name "$file")"
-  id="$(gh api "repos/$REPO/rulesets" --jq ".[] | select(.name == \"$rname\") | .id" 2>/dev/null)"
+  id="$(jq -r --arg n "$rname" '.[] | select(.name == $n) | .id' <<<"$RULESETS")"
   if [ -z "$id" ]; then
     err "ruleset '$rname' missing"
     return
   fi
-  live="$(gh api "repos/$REPO/rulesets/$id")"
+  if ! live="$(fetch "$API/rulesets/$id")"; then
+    echo "ERROR: cannot read ruleset '$rname' (id $id)" >&2
+    FAIL=1
+    return
+  fi
   want="$(jq -S . "$file")"
   if ! jq -e --argjson want "$want" '
       {name, target, enforcement, conditions, rules, bypass_actors}
       | contains($want)
+        and (.conditions == $want.conditions)
         and ((.rules | length) == ($want.rules | length))
         and ((.bypass_actors | length) == ($want.bypass_actors | length))
         and (.enforcement == "active")
@@ -55,9 +73,16 @@ if [ "$MODE" = "full" ]; then
     err "environment 'release' lacks tag deployment policy v*"
   fi
 
-  env_secrets="$(gh api "repos/$REPO/environments/release/secrets" \
-    --jq '[.secrets[].name]' 2>/dev/null || echo '[]')"
-  repo_secrets="$(gh api "repos/$REPO/actions/secrets" --jq '[.secrets[].name]')"
+  if ! env_secrets="$(gh api "repos/$REPO/environments/release/secrets" \
+      --jq '[.secrets[].name]' 2>/dev/null)"; then
+    err "cannot read environment secrets (missing environment or auth)"
+    env_secrets='[]'
+  fi
+  if ! repo_secrets="$(gh api "repos/$REPO/actions/secrets" \
+      --jq '[.secrets[].name]' 2>/dev/null)"; then
+    err "cannot read repo-level secrets (auth?)"
+    repo_secrets='[]'
+  fi
   for s in MINISIGN_SECRET_KEY MINISIGN_PASSWORD; do
     jq -e --arg s "$s" 'index($s)' <<<"$env_secrets" >/dev/null \
       || err "secret $s not in environment 'release'"

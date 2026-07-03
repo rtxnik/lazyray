@@ -48,8 +48,9 @@ if ! gh api "repos/$REPO/environments/release/deployment-branch-policies" \
 fi
 
 cat <<'EOF'
-==> MANUAL: move release secrets into the environment (values are owner-held):
-  gh secret set MINISIGN_SECRET_KEY --env release -R rtxnik/lazyray < <secret-key-file>
+==> MANUAL: move release secrets into the environment (values are owner-held).
+Substitute the real key-file path in the first command:
+  gh secret set MINISIGN_SECRET_KEY --env release -R rtxnik/lazyray < /path/to/minisign-secret.key
   gh secret set MINISIGN_PASSWORD  --env release -R rtxnik/lazyray
   gh secret delete MINISIGN_SECRET_KEY -R rtxnik/lazyray
   gh secret delete MINISIGN_PASSWORD  -R rtxnik/lazyray
