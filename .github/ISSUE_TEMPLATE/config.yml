@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/rtxnik/lazyray/security/advisories/new
     about: Do NOT open a public issue for security problems. Report privately — see SECURITY.md.
   - name: Question / usage help
-    url: https://github.com/rtxnik/lazyray/discussions
-    about: Ask usage questions in Discussions, not the issue tracker.
+    url: https://github.com/rtxnik/lazyray/discussions/categories/q-a
+    about: Ask usage questions in Discussions (Q&A), not the issue tracker.

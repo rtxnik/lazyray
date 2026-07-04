@@ -1,0 +1,16 @@
+[
+  { "name": "type/bug", "color": "d73a4a", "description": "Something is broken" },
+  { "name": "type/feature", "color": "a2eeef", "description": "New feature or enhancement" },
+  { "name": "type/docs", "color": "0075ca", "description": "Documentation only" },
+  { "name": "type/chore", "color": "d4c5f9", "description": "Build, CI, refactoring, maintenance" },
+  { "name": "area/tui", "color": "1d76db", "description": "Terminal UI" },
+  { "name": "area/config", "color": "1d76db", "description": "Profiles, settings, import/export" },
+  { "name": "area/xray", "color": "1d76db", "description": "Xray-core integration and datapath" },
+  { "name": "area/install", "color": "1d76db", "description": "Install, packaging, self-update" },
+  { "name": "area/release", "color": "1d76db", "description": "Release pipeline and signing" },
+  { "name": "status/needs-triage", "color": "fbca04", "description": "Awaiting maintainer triage" },
+  { "name": "status/accepted", "color": "0e8a16", "description": "Triaged and accepted" },
+  { "name": "status/needs-info", "color": "fef2c0", "description": "Waiting on reporter input" },
+  { "name": "no-changelog", "color": "c5def5", "description": "Exempt from the changelog gate (not user-visible)" },
+  { "name": "blocks-release", "color": "b60205", "description": "Halts any release until resolved" }
+]
