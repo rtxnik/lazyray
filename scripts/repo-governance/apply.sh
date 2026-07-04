@@ -8,15 +8,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GOV="$HERE/../../.github/governance"
 
 echo "==> Repo settings"
-gh api -X PATCH "repos/$REPO" \
-  -F allow_squash_merge=true \
-  -F allow_merge_commit=false \
-  -F allow_rebase_merge=false \
-  -F delete_branch_on_merge=true \
-  -F has_discussions=true \
-  -F has_issues=true \
-  -f squash_merge_commit_title=PR_TITLE \
-  -f squash_merge_commit_message=PR_BODY >/dev/null
+gh api -X PATCH "repos/$REPO" --input "$GOV/settings.json" >/dev/null
 echo "settings applied"
 
 echo "==> Vulnerability alerts + automated security fixes"
