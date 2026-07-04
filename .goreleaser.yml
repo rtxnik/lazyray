@@ -71,49 +71,17 @@ signs:
     stdin: "{{ .Env.MINISIGN_PASSWORD }}"
 
 changelog:
-  sort: asc
-  use: git
-  groups:
-    - title: "Enhancements 🔥"
-      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
-      order: 0
-    - title: "Fixes 🔧"
-      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
-      order: 1
-    - title: "Performance ⚡"
-      regexp: '^.*?perf(\([[:word:]]+\))??!?:.+$'
-      order: 2
-    - title: "Tests 🧪"
-      regexp: '^.*?test(\([[:word:]]+\))??!?:.+$'
-      order: 3
-    - title: "CI 🏗️"
-      regexp: '^.*?ci(\([[:word:]]+\))??!?:.+$'
-      order: 4
-    - title: "Docs 📖"
-      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
-      order: 5
-    - title: "Refactoring 🔨"
-      regexp: '^.*?refactor(\([[:word:]]+\))??!?:.+$'
-      order: 6
-    - title: "Maintenance ⚙️"
-      regexp: '^.*?(chore|style)(\([[:word:]]+\))??!?:.+$'
-      order: 7
-    - title: "Other"
-      order: 999
-  filters:
-    exclude:
-      - "^Merge"
+  # Release notes come from GitHub's generator: merged PRs grouped by labels
+  # per .github/release.yml. Squash-only merges keep one PR = one entry.
+  # Snapshot builds (the ci.yml gate) skip changelog generation entirely.
+  use: github-native
 
 release:
   github:
     owner: rtxnik
     name: lazyray
   header: |
-    ## What's Changed 🚀
-
     TUI manager for Xray proxy — [Installation](https://github.com/rtxnik/lazyray#installation)
-  footer: |
-    **Full Changelog**: [{{ .PreviousTag }}...{{ .Tag }}](https://github.com/rtxnik/lazyray/compare/{{ .PreviousTag }}...{{ .Tag }})
 
 nfpms:
   - id: packages

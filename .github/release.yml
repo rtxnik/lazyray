@@ -1,0 +1,20 @@
+changelog:
+  exclude:
+    labels:
+      - no-changelog
+  categories:
+    - title: New features
+      labels:
+        - type/feature
+    - title: Bug fixes
+      labels:
+        - type/bug
+    - title: Documentation
+      labels:
+        - type/docs
+    - title: Dependencies
+      labels:
+        - dependencies
+    - title: Other changes
+      labels:
+        - "*"
