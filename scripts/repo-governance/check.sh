@@ -111,13 +111,24 @@ check_ruleset() {
     fi
   fi
 
-  # required_status_checks must match EXACTLY (context AND integration_id),
-  # in both directions: a live check added on top of the etalon is drift too.
-  local want_rsc live_rsc
-  if want_rsc="$(jq -e -S '.rules[] | select(.type == "required_status_checks")
-        | .parameters.required_status_checks | sort_by(.context)' "$file" 2>/dev/null)"; then
-    live_rsc="$(jq -S '.rules[] | select(.type == "required_status_checks")
-        | .parameters.required_status_checks | sort_by(.context)' <<<"$live")"
+  # required_status_checks: anonymous reads (ci mode) redact integration_id
+  # from each required_status_checks entry -- same redaction class as
+  # bypass_actors above -- so ci mode compares by context name only. full
+  # mode is authenticated and can see integration_id, so it verifies each
+  # entry EXACTLY (context AND integration_id) to confirm the check is
+  # pinned to the correct GitHub App. Both modes still apply a bidirectional
+  # exact match on top of that projection: a live check added on top of the
+  # etalon set is drift too, not just one that's missing.
+  local want_rsc live_rsc rsc_prog
+  if [ "$MODE" = "full" ]; then
+    rsc_prog='.rules[] | select(.type == "required_status_checks")
+        | .parameters.required_status_checks | sort_by(.context)'
+  else
+    rsc_prog='.rules[] | select(.type == "required_status_checks")
+        | .parameters.required_status_checks | sort_by(.context) | map({context})'
+  fi
+  if want_rsc="$(jq -e -S "$rsc_prog" "$file" 2>/dev/null)"; then
+    live_rsc="$(jq -S "$rsc_prog" <<<"$live")"
     if [ "$live_rsc" != "$want_rsc" ]; then
       err "ruleset '$rname' required_status_checks diverge (want=$(jq -c . <<<"$want_rsc") live=$(jq -c . <<<"$live_rsc"))"
     fi
