@@ -3,7 +3,7 @@
 # or safe to build (CI mode, first job of release.yml).
 # Usage: preflight.sh vX.Y.Z[-rc.N]
 #   - If the tag exists (CI mode / re-run), checks apply to the tag's target.
-#   - If it does not (local pre-tag mode), checks apply to origin/main's tip —
+#   - If it does not (local pre-tag mode), checks apply to origin/main's tip,
 #     the commit about to be tagged.
 # Runs ALL checks and reports each one; exits 1 if any failed.
 # Requires: git, jq, gh (authenticated, or anonymous against a public repo).
