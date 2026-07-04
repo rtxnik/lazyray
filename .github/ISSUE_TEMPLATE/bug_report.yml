@@ -1,0 +1,70 @@
+name: Bug report
+description: Report a problem with lzr
+labels: ["type/bug", "status/needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Before posting, REDACT any subscription URLs,
+        server addresses, UUIDs, and passwords from every field — see
+        [SECURITY.md](https://github.com/rtxnik/lazyray/blob/main/SECURITY.md).
+        For usage questions use
+        [Discussions](https://github.com/rtxnik/lazyray/discussions/categories/q-a)
+        instead of the issue tracker.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: lzr version
+      description: Output of `lzr --version`.
+      placeholder: lzr version 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS / architecture
+      placeholder: e.g. macOS 15.5 / arm64
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Sanitized config
+      description: >-
+        The relevant profile or settings fragment with ALL credentials, server
+        addresses, UUIDs, and subscription URLs replaced by placeholders
+        (e.g. example.com, a dummy UUID).
+      render: yaml
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: lzr doctor output (optional)
+      description: >-
+        Run `lzr doctor` and paste the result — double-check and redact
+        anything sensitive before posting.
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (optional)
+      description: Relevant lines from `lzr logs`, credentials redacted.
+      render: text
