@@ -43,11 +43,14 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
         run: |
-          if gh api "repos/$REPO/pulls/$PR" --jq '.labels[].name' | grep -qxF 'no-changelog'; then
+          set -euo pipefail
+          labels=$(gh api "repos/$REPO/pulls/$PR" --jq '.labels[].name')
+          if grep -qxF 'no-changelog' <<<"$labels"; then
             echo "no-changelog label present - exempt"
             exit 0
           fi
-          if gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename' | grep -qxF 'CHANGELOG.md'; then
+          files=$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename')
+          if grep -qxF 'CHANGELOG.md' <<<"$files"; then
             echo "CHANGELOG.md updated"
             exit 0
           fi
