@@ -6,9 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 > **Releasing:** entries accumulate under `[Unreleased]`; a release is cut by
-> tagging `vX.Y.Z`, which drives GoReleaser to build, sign (minisign), and
-> publish the artifacts with categorized GitHub release notes generated from the
-> conventional-commit history.
+> tagging `vX.Y.Z` on a green `main` after a preflight gate, which drives
+> GoReleaser to build, sign (minisign), and publish the artifacts with release
+> notes generated from merged pull requests and their labels.
 
 ## [Unreleased]
 
@@ -245,13 +245,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extraction of geoip.dat and geosite.dat from xray zip archive
 - TUI visual bugs in modal overlay, logs, and panel sizing
 
-[1.0.0]: https://github.com/rtxnik/lazyray/compare/v0.8.0...v1.0.0
-[0.8.0]: https://github.com/rtxnik/lazyray/compare/v0.7.0...v0.8.0
-[0.7.0]: https://github.com/rtxnik/lazyray/compare/v0.6.1...v0.7.0
-[0.6.1]: https://github.com/rtxnik/lazyray/compare/v0.6.0...v0.6.1
-[0.6.0]: https://github.com/rtxnik/lazyray/compare/v0.5.0...v0.6.0
-[0.5.0]: https://github.com/rtxnik/lazyray/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/rtxnik/lazyray/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/rtxnik/lazyray/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/rtxnik/lazyray/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/rtxnik/lazyray/releases/tag/v0.1.0
+<!-- Versions before 1.0.0 predate this repository's history: there are no
+     tags to link, so those sections are intentionally unlinked. -->
+[Unreleased]: https://github.com/rtxnik/lazyray/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/rtxnik/lazyray/releases/tag/v1.0.0
