@@ -3,6 +3,7 @@
   { "name": "type/feature", "color": "a2eeef", "description": "New feature or enhancement" },
   { "name": "type/docs", "color": "0075ca", "description": "Documentation only" },
   { "name": "type/chore", "color": "d4c5f9", "description": "Build, CI, refactoring, maintenance" },
+  { "name": "dependencies", "color": "0366d6", "description": "Pull requests that update a dependency file" },
   { "name": "area/tui", "color": "1d76db", "description": "Terminal UI" },
   { "name": "area/config", "color": "1d76db", "description": "Profiles, settings, import/export" },
   { "name": "area/xray", "color": "1d76db", "description": "Xray-core integration and datapath" },

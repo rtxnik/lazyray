@@ -96,7 +96,7 @@ if it focuses a panel. The full per-guard checklist lives in
   changes with no user-visible effect (refactors, CI), apply the
   `no-changelog` label instead.
 - Bug-fix PRs reference their issue with `Closes #N`.
-- Add exactly one `type/*` label — release notes are grouped by it.
+- Add exactly one `type/*` label — release notes are grouped by it. If you cannot set labels, the maintainer applies them at triage.
 - Releases are cut from `main` by the maintainer: [docs/releasing.md](docs/releasing.md).
 
 ## End-to-end tests

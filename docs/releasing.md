@@ -26,6 +26,8 @@ environment holds the signing secrets, so nobody else can trigger this path.
      `vX.Y.Z...HEAD`, and add
      `[X.Y.Z]: https://github.com/rtxnik/lazyray/compare/v<prev>...vX.Y.Z`.
    - Title: `chore: prepare vX.Y.Z release`.
+   - Apply the `no-changelog` label: the prep PR must not appear in the
+     generated release notes (the curated CHANGELOG already carries it).
 2. **Merge it** (squash; checks green; branch up to date).
 3. **Preflight locally** from an up-to-date `main` checkout — all checks must
    pass BEFORE the tag exists; a bad tag caught here costs nothing, a pushed
