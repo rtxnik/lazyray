@@ -7,7 +7,8 @@ participating you agree to abide by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Development setup
 
-You need Go 1.24 or newer (the module targets `go 1.24.7`). Docker is only
+You need Go 1.26.4 or newer — the version `go.mod` declares and CI builds with
+(toolchain policy: [docs/stability.md](docs/stability.md)). Docker is only
 required for the end-to-end suite (see below).
 
 ```bash
@@ -77,14 +78,26 @@ if it focuses a panel. The full per-guard checklist lives in
 
 ## Commit and pull-request process
 
+- Branch from `main`, named `<type>/<short-description>` using the same types
+  as commit prefixes — for example `fix/tunnel-cleanup`, `feat/pac-flag`,
+  `docs/stability-policy`.
 - Use [Conventional Commits](https://www.conventionalcommits.org/) for commit
   messages (for example `feat:`, `fix:`, `docs:`, `refactor:`).
+- **The PR title must follow Conventional Commits** — the required `PR title`
+  check enforces it, and squash merges use the title verbatim as the commit
+  subject on `main`. Intra-PR commit messages are local hygiene, not enforced.
 - Open the PR against `main`. The
-  [pull request template](.github/pull_request_template.md) lists the checklist
-  that has to pass.
-- Keep PRs focused — one logical change per PR is easier to review.
+  [pull request template](.github/pull_request_template.md) lists the
+  checklist that has to pass.
+- Keep PRs focused and reviewable — one logical change per PR, as a guideline
+  under ~400 changed lines. Split bigger work into a series.
 - Update the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md) for any
-  user-facing change.
+  user-facing change — the required `Changelog OK` check enforces this. For
+  changes with no user-visible effect (refactors, CI), apply the
+  `no-changelog` label instead.
+- Bug-fix PRs reference their issue with `Closes #N`.
+- Add exactly one `type/*` label — release notes are grouped by it.
+- Releases are cut from `main` by the maintainer: [docs/releasing.md](docs/releasing.md).
 
 ## End-to-end tests
 
