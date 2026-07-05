@@ -14,6 +14,9 @@ builds:
     binary: lzr
     env:
       - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
       - -s -w -X main.version={{.Version}}
     goos:
@@ -49,6 +52,15 @@ archives:
 
 checksum:
   name_template: "checksums.txt"
+
+sboms:
+  - id: archive
+    artifacts: archive
+    # Deterministic, offline SPDX SBOM per archive. Overriding args drops the
+    # syft default `--enrich all` (network CVE/CPE enrichment) so the per-PR
+    # snapshot gate never touches the network. Default document name is
+    # {{ .ArtifactName }}.sbom.json.
+    args: ["$artifact", "--output", "spdx-json=$document"]
 
 signs:
   - id: minisign

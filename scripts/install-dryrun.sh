@@ -22,10 +22,10 @@ export MINISIGN_SECRET_KEY_FILE MINISIGN_PASSWORD
 
 echo "==> building snapshot artifacts"
 rm -rf dist
-goreleaser release --snapshot --clean --skip=publish
+goreleaser release --snapshot --clean --skip=publish,sbom
 
 # Resolve the snapshot version goreleaser stamped (e.g. 0.8.0-next or 0.8.1-SNAPSHOT-<sha>).
-ver=$(goreleaser release --snapshot --clean --skip=publish 2>/dev/null >/dev/null; \
+ver=$(goreleaser release --snapshot --clean --skip=publish,sbom 2>/dev/null >/dev/null; \
       sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' dist/metadata.json | head -n1)
 [ -n "$ver" ] || { echo "FAIL: could not read snapshot version from dist/metadata.json"; exit 1; }
 

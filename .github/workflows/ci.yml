@@ -124,6 +124,11 @@ jobs:
             echo "MINISIGN_PASSWORD=ci-snapshot"
           } >> "$GITHUB_ENV"
 
+      - name: Install syft (SBOM generator)
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          syft-version: v1.46.0
+
       - name: Build snapshot release with signing
         uses: goreleaser/goreleaser-action@9ed2f89a662bf1735a48bc8557fd212fa902bebf # v6.1.0
         with:
@@ -142,6 +147,18 @@ jobs:
             -p "${MINISIGN_PUBLIC_KEY_FILE}" \
             -m dist/checksums.txt \
             -x dist/checksums.txt.minisig
+
+      - name: Assert an SBOM exists for every archive
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          sbom_files=(dist/*.sbom.json)
+          archive_files=(dist/*.tar.gz dist/*.zip)
+          sboms=${#sbom_files[@]}
+          archives=${#archive_files[@]}
+          echo "archives=$archives sboms=$sboms"
+          [ "$sboms" -gt 0 ] || { echo "::error::no SBOM (*.sbom.json) produced in dist/"; exit 1; }
+          [ "$sboms" -eq "$archives" ] || { echo "::error::SBOM count ($sboms) != archive count ($archives)"; exit 1; }
 
   docs-freshness:
     name: Docs freshness (generated reference)
