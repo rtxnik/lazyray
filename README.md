@@ -15,6 +15,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/rtxnik/lazyray?style=flat&color=98971a" alt="License"></a>
   <a href="https://github.com/rtxnik/lazyray/actions"><img src="https://img.shields.io/github/actions/workflow/status/rtxnik/lazyray/ci.yml?branch=main&style=flat&label=CI" alt="CI"></a>
   <a href="https://goreportcard.com/report/github.com/rtxnik/lazyray"><img src="https://goreportcard.com/badge/github.com/rtxnik/lazyray" alt="Go Report Card"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/rtxnik/lazyray"><img src="https://api.securityscorecards.dev/projects/github.com/rtxnik/lazyray/badge" alt="OpenSSF Scorecard"></a>
 </p>
 
 ---
