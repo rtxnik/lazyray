@@ -92,6 +92,7 @@ release:
   github:
     owner: rtxnik
     name: lazyray
+  draft: true
   header: |
     TUI manager for Xray proxy — [Installation](https://github.com/rtxnik/lazyray#installation)
 

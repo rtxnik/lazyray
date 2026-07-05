@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Reproducible release builds (`-trimpath` plus commit-timestamped module stamps, byte-identical binaries per commit) and a Syft-generated SPDX SBOM (`<archive>.sbom.json`) published alongside every release archive.
+- SLSA build-provenance attestation for release artifacts, verifiable with `gh attestation verify <file> --repo rtxnik/lazyray`; releases are now published draft-first, so all assets and the attestation exist before a release becomes public.
 
 ### Changed
 - `scripts/install.sh` now verifies `checksums.txt.minisig` against the same
