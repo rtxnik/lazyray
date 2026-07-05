@@ -1,0 +1,40 @@
+version: 2
+
+updates:
+  # Go module dependencies: one grouped PR per week.
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    # "dependencies" for triage; "no-changelog" satisfies the Changelog OK gate.
+    labels:
+      - "dependencies"
+      - "no-changelog"
+    groups:
+      go-deps:
+        patterns:
+          - "*"
+    # Version updates wait for the package to settle; security updates bypass this.
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+
+  # GitHub Actions pinned in workflows: one grouped PR per week.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "no-changelog"
+    groups:
+      actions:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
