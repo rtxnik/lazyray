@@ -8,6 +8,11 @@
 #   * If `minisign` is absent, prints a loud WARN + install instructions and
 #     continues at checksum level — UNLESS --require-signature was passed, in
 #     which case the absence is fatal.
+#   * Out-of-band (optional): a published release also carries a keyless SLSA
+#     build-provenance attestation, an INDEPENDENT trust root disjoint from the
+#     minisign key. This installer stays minisign-primary and does NOT require
+#     it; verify separately with:
+#       gh attestation verify <archive> --repo rtxnik/lazyray
 #
 # Honest trade-off: a bare `curl … | sh` without minisign gives only
 # checksum-level protection (corruption / MITM-beyond-TLS / tampered mirror),
