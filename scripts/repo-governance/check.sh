@@ -4,7 +4,8 @@
 #   ci   - rulesets only; anonymous REST reads (public repo), needs no token
 #   full - also settings, release environment, secret homing, vuln alerts
 #          (requires owner-authenticated gh)
-# Exit codes: 0 = OK, 1 = drift detected, 2 = could not verify (read failure)
+# Exit codes: 0 = OK, 1 = drift detected, 2 = could not verify (read failure).
+# Confirmed drift outranks read noise: if both occur, the exit code is 1.
 # Note: bypass_actors are NOT visible to anonymous reads (the API returns
 # null); ci mode therefore checks everything except bypass_actors, and full
 # mode verifies them exactly via authenticated gh.
@@ -25,11 +26,30 @@ rerr() { echo "ERROR: $*" >&2; ERR=1; }
 # Actions-token permission question entirely (installation tokens 403 on the
 # rulesets endpoints regardless of repo visibility). A fetch failure is
 # reported as an ERROR (exit 2), never conflated with "ruleset missing".
-fetch() { curl -fsS --retry 3 --retry-delay 30 -H "Accept: application/vnd.github+json" "$1"; }
+# curl --retry covers transient 429/5xx; a 403 (rate limit or permissions) is
+# surfaced distinctly instead of hiding inside a generic curl failure.
+fetch() {
+  local url="$1" out code body
+  if ! out="$(curl -sS --retry 3 --retry-delay 30 -w '\n%{http_code}' \
+        -H "Accept: application/vnd.github+json" "$url")"; then
+    echo "curl failure for $url" >&2
+    return 1
+  fi
+  code="${out##*$'\n'}"
+  body="${out%$'\n'*}"
+  case "$code" in
+    200) printf '%s' "$body"; return 0 ;;
+    403|429) echo "HTTP $code for $url (rate limit or forbidden)" >&2; return 1 ;;
+    *) echo "HTTP $code for $url" >&2; return 1 ;;
+  esac
+}
 
-if ! RULESETS="$(fetch "$API/rulesets")"; then
+if ! RULESETS="$(fetch "$API/rulesets?per_page=100")"; then
   echo "ERROR: cannot read rulesets list for $REPO (network/HTTP failure)" >&2
   exit 2
+fi
+if [ "$(jq 'length' <<<"$RULESETS")" -ge 100 ]; then
+  rerr "rulesets list hit the per_page=100 ceiling; add pagination before trusting this check"
 fi
 
 check_ruleset() {
@@ -90,6 +110,29 @@ check_ruleset() {
       err "ruleset '$rname' pull_request.allowed_merge_methods diverges (want=$want_pr live=$live_pr)"
     fi
   fi
+
+  # required_status_checks: anonymous reads (ci mode) redact integration_id
+  # from each required_status_checks entry -- same redaction class as
+  # bypass_actors above -- so ci mode compares by context name only. full
+  # mode is authenticated and can see integration_id, so it verifies each
+  # entry EXACTLY (context AND integration_id) to confirm the check is
+  # pinned to the correct GitHub App. Both modes still apply a bidirectional
+  # exact match on top of that projection: a live check added on top of the
+  # etalon set is drift too, not just one that's missing.
+  local want_rsc live_rsc rsc_prog
+  if [ "$MODE" = "full" ]; then
+    rsc_prog='.rules[] | select(.type == "required_status_checks")
+        | .parameters.required_status_checks | sort_by(.context)'
+  else
+    rsc_prog='.rules[] | select(.type == "required_status_checks")
+        | .parameters.required_status_checks | sort_by(.context) | map({context})'
+  fi
+  if want_rsc="$(jq -e -S "$rsc_prog" "$file" 2>/dev/null)"; then
+    live_rsc="$(jq -S "$rsc_prog" <<<"$live")"
+    if [ "$live_rsc" != "$want_rsc" ]; then
+      err "ruleset '$rname' required_status_checks diverge (want=$(jq -c . <<<"$want_rsc") live=$(jq -c . <<<"$live_rsc"))"
+    fi
+  fi
 }
 
 check_ruleset "$GOV/rulesets/main.json"
@@ -135,12 +178,14 @@ if [ "$MODE" = "full" ]; then
     || err "vulnerability alerts disabled"
 fi
 
-if [ "$ERR" -ne 0 ]; then
-  echo "repo-governance check: ERROR (could not verify)"
-  exit 2
-fi
+# Confirmed drift outranks read noise (FAIL wins over ERR): automation must
+# treat "we saw drift" as the stronger signal even if some reads also failed.
 if [ "$FAIL" -ne 0 ]; then
   echo "repo-governance check: FAIL"
   exit 1
+fi
+if [ "$ERR" -ne 0 ]; then
+  echo "repo-governance check: ERROR (could not verify)"
+  exit 2
 fi
 echo "repo-governance check: OK ($MODE)"

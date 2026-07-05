@@ -9,8 +9,26 @@ permissions:
   contents: write
 
 jobs:
+  preflight:
+    name: Release preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+      issues: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Preflight checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/repo-governance/preflight.sh "$GITHUB_REF_NAME"
+
   release:
     name: Release
+    needs: preflight
     runs-on: ubuntu-latest
     environment: release
     steps:
