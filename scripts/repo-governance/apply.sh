@@ -7,6 +7,44 @@ REPO="${GOVERNANCE_REPO:-rtxnik/lazyray}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GOV="$HERE/../../.github/governance"
 
+# --- Staleness guard -------------------------------------------------------
+# A stale local checkout silently no-ops this apply (it computes no diff versus
+# the etalon it was built from) and then check.sh passes against that same
+# stale etalon -- a false green. Refuse to apply from a HEAD that differs from
+# origin/main unless the operator explicitly overrides (ALLOW_STALE=1 or --force).
+ALLOW_STALE="${ALLOW_STALE:-0}"
+for arg in "$@"; do
+  case "$arg" in
+    --force) ALLOW_STALE=1 ;;
+    *) echo "unknown argument: $arg" >&2; exit 2 ;;
+  esac
+done
+
+if git -C "$HERE" rev-parse --git-dir >/dev/null 2>&1; then
+  if git -C "$HERE" fetch --quiet origin 2>/dev/null; then
+    local_head="$(git -C "$HERE" rev-parse HEAD)"
+    remote_head="$(git -C "$HERE" rev-parse origin/main)"
+    if [ "$local_head" != "$remote_head" ]; then
+      echo "############################################################" >&2
+      echo "# STALE CHECKOUT" >&2
+      echo "#   HEAD        $local_head" >&2
+      echo "#   origin/main $remote_head" >&2
+      echo "# Applying from a stale tree can silently no-op and then pass" >&2
+      echo "# check.sh against the same stale etalon (a false green)." >&2
+      echo "# Refusing. Re-run on an up-to-date main, or override with:" >&2
+      echo "#   ALLOW_STALE=1 $0        (or:  $0 --force)" >&2
+      echo "############################################################" >&2
+      if [ "$ALLOW_STALE" != "1" ]; then
+        exit 3
+      fi
+      echo "ALLOW_STALE override set -- proceeding despite stale HEAD." >&2
+    fi
+  else
+    echo "WARNING: could not fetch origin; staleness not verified." >&2
+  fi
+fi
+# ---------------------------------------------------------------------------
+
 echo "==> Repo settings"
 gh api -X PATCH "repos/$REPO" --input "$GOV/settings.json" >/dev/null
 echo "settings applied"

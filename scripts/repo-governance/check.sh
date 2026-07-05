@@ -22,14 +22,26 @@ ERR=0
 err() { echo "DRIFT: $*" >&2; FAIL=1; }
 rerr() { echo "ERROR: $*" >&2; ERR=1; }
 
-# Rulesets on public repos are readable anonymously. Plain curl sidesteps the
-# Actions-token permission question entirely (installation tokens 403 on the
-# rulesets endpoints regardless of repo visibility). A fetch failure is
-# reported as an ERROR (exit 2), never conflated with "ruleset missing".
-# curl --retry covers transient 429/5xx; a 403 (rate limit or permissions) is
-# surfaced distinctly instead of hiding inside a generic curl failure.
+# fetch takes an API path SUFFIX (e.g. "rulesets/$id") and routes by mode:
+#   full - authenticated `gh api`: avoids the 60/hour anonymous limit and, most
+#          importantly, returns the real bypass_actors and
+#          required_status_checks[].integration_id that anonymous reads redact
+#          to null (so full mode can verify them exactly).
+#   ci   - anonymous curl on the public repo (no token needed); the redaction
+#          is handled downstream by the mode-gated jq projections. A fetch
+#          failure is an ERROR (exit 2), never conflated with "ruleset missing".
+#          curl --retry covers transient 429/5xx; 403 (rate limit or
+#          permissions) is surfaced distinctly, not hidden in a generic failure.
 fetch() {
-  local url="$1" out code body
+  local path="$1"
+  if [ "$MODE" = "full" ]; then
+    if ! gh api "repos/$REPO/$path" 2>/dev/null; then
+      echo "gh api failure for repos/$REPO/$path" >&2
+      return 1
+    fi
+    return 0
+  fi
+  local url="$API/$path" out code body
   if ! out="$(curl -sS --retry 3 --retry-delay 30 -w '\n%{http_code}' \
         -H "Accept: application/vnd.github+json" "$url")"; then
     echo "curl failure for $url" >&2
@@ -44,7 +56,7 @@ fetch() {
   esac
 }
 
-if ! RULESETS="$(fetch "$API/rulesets?per_page=100")"; then
+if ! RULESETS="$(fetch "rulesets?per_page=100")"; then
   echo "ERROR: cannot read rulesets list for $REPO (network/HTTP failure)" >&2
   exit 2
 fi
@@ -60,7 +72,7 @@ check_ruleset() {
     err "ruleset '$rname' missing"
     return
   fi
-  if ! live="$(fetch "$API/rulesets/$id")"; then
+  if ! live="$(fetch "rulesets/$id")"; then
     rerr "cannot read ruleset '$rname' (id $id)"
     return
   fi
