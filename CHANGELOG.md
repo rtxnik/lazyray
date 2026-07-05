@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Release signatures are now verified against an embedded trust-list of signing
+  keys rather than a single key: a release is accepted if any trusted key
+  verifies its signature. The in-binary self-updater is now rotation-ready with
+  no change to the signed-artifact filenames or the download path.
+
 ## [1.0.0] - 2026-07-02
 
 ### Added

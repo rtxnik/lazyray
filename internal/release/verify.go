@@ -17,10 +17,15 @@ import (
 	"aead.dev/minisign"
 )
 
-// releaseSigningPubKey is the live minisign public key the project signs its
-// releases with. It is a var (not const) so consumer tests (e.g. self-update)
-// can point the verifier at an ephemeral key via SetPublicKeyForTest.
-var releaseSigningPubKey = "RWT1X2unwbak2iRSpo1E/k3BWHDjQCzAwgPJft7dtXwRS+3IFxNkR0Ag"
+// releaseSigningPubKeys is the ordered, embedded trust-list of minisign public
+// keys the project signs its releases with. VerifyRelease accepts a release when
+// ANY key in this list verifies the signature (accept-any); the list only ever
+// grows on a rotation and a retired key is dropped only on a deliberate call. It
+// is a var (not const) so consumer tests (e.g. self-update) can point the
+// verifier at ephemeral keys via SetPublicKeyForTest / SetPublicKeysForTest.
+var releaseSigningPubKeys = []string{
+	"RWT1X2unwbak2iRSpo1E/k3BWHDjQCzAwgPJft7dtXwRS+3IFxNkR0Ag",
+}
 
 // Typed sentinels returned by Verify and VerifyRelease so callers can branch on
 // the exact failure with errors.Is.
@@ -37,7 +42,14 @@ var (
 
 // DefaultPublicKey returns the embedded release-signing public key.
 func DefaultPublicKey() string {
-	return releaseSigningPubKey
+	return releaseSigningPubKeys[0]
+}
+
+// DefaultPublicKeys returns a copy of the embedded release-signing trust-list.
+func DefaultPublicKeys() []string {
+	out := make([]string, len(releaseSigningPubKeys))
+	copy(out, releaseSigningPubKeys)
+	return out
 }
 
 // SetPublicKeyForTest temporarily replaces the embedded release-signing key with
@@ -45,9 +57,18 @@ func DefaultPublicKey() string {
 // It exists so consumer packages (e.g. self-update) can exercise the production
 // VerifyRelease path against an ephemeral keypair. Not for production use.
 func SetPublicKeyForTest(pubText string) (restore func()) {
-	prev := releaseSigningPubKey
-	releaseSigningPubKey = pubText
-	return func() { releaseSigningPubKey = prev }
+	return SetPublicKeysForTest([]string{pubText})
+}
+
+// SetPublicKeysForTest temporarily replaces the embedded trust-list with
+// pubTexts and returns a restore function that reinstates the previous list.
+// Not for production use.
+func SetPublicKeysForTest(pubTexts []string) (restore func()) {
+	prev := releaseSigningPubKeys
+	next := make([]string, len(pubTexts))
+	copy(next, pubTexts)
+	releaseSigningPubKeys = next
+	return func() { releaseSigningPubKeys = prev }
 }
 
 // Verify checks that sig is a valid minisign signature over msg under the
@@ -73,13 +94,18 @@ func Verify(pubKeyText string, msg, sig []byte) error {
 //
 // Any failed step fails closed with a typed sentinel.
 func VerifyRelease(archivePath string, checksumsTxt, checksumsSig []byte) error {
-	return verifyReleaseWithKey(DefaultPublicKey(), archivePath, checksumsTxt, checksumsSig)
+	return verifyReleaseWithKeys(DefaultPublicKeys(), archivePath, checksumsTxt, checksumsSig)
 }
 
 // verifyReleaseWithKey is the testable core of VerifyRelease. Tests inject an
 // ephemeral public key here instead of the embedded production key.
 func verifyReleaseWithKey(pubKeyText, archivePath string, checksumsTxt, checksumsSig []byte) error {
-	if err := Verify(pubKeyText, checksumsTxt, checksumsSig); err != nil {
+	return verifyReleaseWithKeys([]string{pubKeyText}, archivePath, checksumsTxt, checksumsSig)
+}
+
+// verifyReleaseWithKeys is the testable core of VerifyRelease over a trust-list.
+func verifyReleaseWithKeys(pubKeys []string, archivePath string, checksumsTxt, checksumsSig []byte) error {
+	if err := verifyAnyKey(pubKeys, checksumsTxt, checksumsSig); err != nil {
 		return err
 	}
 
@@ -98,6 +124,55 @@ func verifyReleaseWithKey(pubKeyText, archivePath string, checksumsTxt, checksum
 		return fmt.Errorf("%w: %s (have %s, want %s)", ErrChecksumMismatch, name, got, want)
 	}
 	return nil
+}
+
+// verifyAnyKey returns nil iff sig is a valid minisign signature over msg under
+// ANY key in pubKeys. The signature's KeyID is used only as an unauthenticated
+// hint to try the matching candidate first; because the KeyID is not covered by
+// the Ed25519 signature, each candidate is re-stamped with its own ID before the
+// full minisign verification, so a genuine signature is never rejected on a
+// mismatched hint. On a miss every remaining key is tried; it accepts iff any
+// verifies and fails closed with ErrSignatureInvalid otherwise (empty list too).
+func verifyAnyKey(pubKeys []string, msg, sig []byte) error {
+	var parsed minisign.Signature
+	if err := parsed.UnmarshalText(sig); err != nil {
+		return ErrSignatureInvalid
+	}
+
+	pubs := make([]minisign.PublicKey, 0, len(pubKeys))
+	for _, text := range pubKeys {
+		var pub minisign.PublicKey
+		if err := pub.UnmarshalText([]byte(text)); err != nil {
+			return fmt.Errorf("release: parsing trust-list public key: %w", err)
+		}
+		pubs = append(pubs, pub)
+	}
+
+	// Try the key whose ID matches the (unauthenticated) hint first, then the rest.
+	order := make([]int, 0, len(pubs))
+	for i := range pubs {
+		if pubs[i].ID() == parsed.KeyID {
+			order = append(order, i)
+		}
+	}
+	for i := range pubs {
+		if pubs[i].ID() != parsed.KeyID {
+			order = append(order, i)
+		}
+	}
+
+	for _, i := range order {
+		candidate := parsed
+		candidate.KeyID = pubs[i].ID()
+		sigText, err := candidate.MarshalText()
+		if err != nil {
+			continue
+		}
+		if minisign.Verify(pubs[i], msg, sigText) {
+			return nil
+		}
+	}
+	return ErrSignatureInvalid
 }
 
 // checksumForAsset returns the lowercase hex SHA-256 recorded for assetName in a
