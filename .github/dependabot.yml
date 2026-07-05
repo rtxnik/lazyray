@@ -35,6 +35,7 @@ updates:
       actions:
         patterns:
           - "*"
+    # semver-major-days is unsupported for the github-actions ecosystem
+    # (Dependabot schema); actions updates use the default cooldown only.
     cooldown:
       default-days: 7
-      semver-major-days: 14
