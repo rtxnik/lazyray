@@ -42,6 +42,9 @@ actionable.
 `lzr` keeps itself current through `lzr update` / `lzr self-update`, so only the
 latest released version is supported. Older versions receive no security fixes —
 upgrade to the latest release.
+Fixes ship **fix-forward**: a new release cut from `main`, never a backport.
+A confirmed vulnerability or regression targets a patch release within
+48 hours of confirmation.
 
 | Version  | Supported |
 | -------- | --------- |

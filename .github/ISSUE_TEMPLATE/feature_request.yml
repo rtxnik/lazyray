@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest an idea for lzr
+labels: ["type/feature", "status/needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Scope check: lzr manages client-side Xray proxies. It is not a server,
+        a VPN/TUN, or a general tunnel manager — see
+        [Scope / Non-goals](https://github.com/rtxnik/lazyray/blob/main/docs/ARCHITECTURE.md).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that lzr makes hard or impossible?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like lzr to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
