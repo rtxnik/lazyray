@@ -4,6 +4,10 @@ Maintainer runbook for cutting a lazyray release. The release act is pushing a
 `v*` tag: tag creation is restricted to the repository admin, and the `release`
 environment holds the signing secrets, so nobody else can trigger this path.
 
+> **Signing-key custody and rotation:** key custody, planned rotation, and the
+> key-compromise response have a dedicated runbook — see
+> [key-rotation.md](key-rotation.md).
+
 ## Cadence
 
 - On-demand, with a soft monthly ceiling: release when at least one
