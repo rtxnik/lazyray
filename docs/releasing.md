@@ -65,6 +65,33 @@ environment holds the signing secrets, so nobody else can trigger this path.
    lzr --version
    ```
 
+## Verifying a release
+
+A published release carries **two independent trust roots**; either alone is
+sufficient, and they fail differently, so verifying both is strongest.
+
+1. **minisign signature (maintainer key)** — the primary root, checked
+   automatically by `scripts/install.sh`, Homebrew, and the native packages.
+   Manual check (download `checksums.txt` and `checksums.txt.minisig` from the
+   release into the same directory first):
+
+   ```bash
+   minisign -Vm checksums.txt -P RWT1X2unwbak2iRSpo1E/k3BWHDjQCzAwgPJft7dtXwRS+3IFxNkR0Ag
+   ```
+
+2. **Build-provenance attestation (keyless, out-of-band)** — an independent
+   SLSA root anchored in the CI workflow's OIDC identity and the public Rekor
+   transparency log, disjoint from the maintainer's minisign secret. Verify any
+   downloaded archive directly:
+
+   ```bash
+   gh attestation verify lazyray_<ver>_<os>_<arch>.tar.gz --repo rtxnik/lazyray
+   ```
+
+   Attestation covers releases published under the current pipeline; releases
+   before it (v1.0.0 and earlier) have no attestation, so this check fails for
+   them - verify those by minisign only.
+
 ## If the pipeline fails
 
 Nothing was published (GoReleaser aborts before the release goes public): fix
@@ -93,3 +120,45 @@ maintainer. If an emergency truly requires a direct push:
 
 The weekly governance drift check goes red while enforcement is off. That is by
 design: silently disabled protection must be impossible.
+
+## First release under the supply-chain pipeline (rc rehearsal) [OWNER]
+
+Before the first production release that ships SBOMs, provenance, and
+draft-first publishing, rehearse the whole pipeline on a prerelease tag. This
+proves the build -> upload(draft) -> attest -> publish ordering end-to-end
+BEFORE any release is made immutable (enabling immutable releases first could
+lock a release before its attestation exists — the known attest/upload race).
+
+1. Cut a prerelease tag from a green `main`:
+
+   ```bash
+   git checkout main && git pull
+   scripts/repo-governance/preflight.sh v<next>-rc.1
+   git tag -a v<next>-rc.1 -m "v<next>-rc.1" && git push origin v<next>-rc.1
+   ```
+
+2. Watch the `Release` run. Confirm, in order: GoReleaser created a **draft**
+   release with every archive, package, `checksums.txt(.minisig)`, and one
+   `*.sbom.json` per archive; the **Attest build provenance** step printed an
+   attestation URL; the **Publish the draft release** step flipped it public.
+
+3. Confirm the independent roots on the published prerelease:
+
+   ```bash
+   gh attestation verify \
+     "$(gh release download v<next>-rc.1 --repo rtxnik/lazyray -p 'lazyray_*_linux_amd64.tar.gz' --dir /tmp/rc && echo /tmp/rc/lazyray_*_linux_amd64.tar.gz)" \
+     --repo rtxnik/lazyray
+   ```
+
+   and check the auto-triggered **Post-release verify** run is green.
+
+4. Tear down the rehearsal:
+
+   ```bash
+   gh release delete v<next>-rc.1 --repo rtxnik/lazyray --cleanup-tag --yes
+   ```
+
+5. **Only now** [OWNER] enable **immutable releases** (repo Settings ->
+   General -> Releases -> Immutable releases). With the ordering proven, no
+   release is ever made immutable before its assets and attestation are
+   complete. From here, cut the real `v<next>` per "Cutting vX.Y.Z" above.
