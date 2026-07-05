@@ -4,7 +4,7 @@
 # Trust model:
 #   * ALWAYS verifies the archive's SHA-256 against the signed checksums.txt.
 #   * If `minisign` is on PATH, ALSO verifies checksums.txt.minisig against the
-#     public key embedded below (full supply-chain chain of trust).
+#     embedded trust-list of public keys below (full supply-chain chain of trust).
 #   * If `minisign` is absent, prints a loud WARN + install instructions and
 #     continues at checksum level — UNLESS --require-signature was passed, in
 #     which case the absence is fatal.
@@ -25,10 +25,11 @@
 
 set -eu
 
-# --- embedded release-signing public key -----------------------------------
-# Must stay byte-identical to releaseSigningPubKey in internal/release/verify.go.
-# This is the project's live release-signing public key.
-RELEASE_PUBKEY="RWT1X2unwbak2iRSpo1E/k3BWHDjQCzAwgPJft7dtXwRS+3IFxNkR0Ag"
+# --- embedded release-signing trust-list -----------------------------------
+# One minisign public key per line. MUST stay byte-in-sync with
+# releaseSigningPubKeys in internal/release/verify.go. The installer accepts the
+# download when ANY listed key verifies checksums.txt.minisig (accept-any).
+RELEASE_PUBKEYS='RWT1X2unwbak2iRSpo1E/k3BWHDjQCzAwgPJft7dtXwRS+3IFxNkR0Ag'
 
 REPO="rtxnik/lazyray"
 PREFIX="${PREFIX:-/usr/local}"
@@ -143,13 +144,28 @@ verify_checksum() {
 # shellcheck disable=SC2329
 # --- verify_signature: minisign over checksums.txt -------------------------
 verify_signature() {
-	pubfile="${workdir}/lazyray.pub"
-	# minisign -V expects the 2-line public-key format; -P passes it inline,
-	# but for portability across minisign builds we write a key file.
-	printf 'untrusted comment: lazyray release signing key\n%s\n' "$RELEASE_PUBKEY" > "$pubfile"
-	minisign -V -p "$pubfile" -m "${workdir}/checksums.txt" \
-		|| die "minisign verification of checksums.txt FAILED — refusing to install"
-	info "minisign signature OK"
+	# Try every embedded trust-list key; accept iff ANY verifies (accept-any).
+	verified=0
+	old_ifs=$IFS
+	IFS='
+'
+	set -f # iterate raw key lines without globbing
+	i=0
+	for key in $RELEASE_PUBKEYS; do
+		[ -n "$key" ] || continue
+		i=$((i + 1))
+		pubfile="${workdir}/lazyray_${i}.pub"
+		printf 'untrusted comment: lazyray release signing key\n%s\n' "$key" > "$pubfile"
+		if minisign -V -p "$pubfile" -m "${workdir}/checksums.txt" >/dev/null 2>&1; then
+			verified=1
+			break
+		fi
+	done
+	set +f
+	IFS=$old_ifs
+	[ "$verified" -eq 1 ] \
+		|| die "minisign verification of checksums.txt FAILED against every embedded key — refusing to install"
+	info "minisign signature OK (trust-list key #${i})"
 }
 
 verify_checksum

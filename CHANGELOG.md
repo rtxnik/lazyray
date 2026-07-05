@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `scripts/install.sh` now verifies `checksums.txt.minisig` against the same
+  embedded trust-list of signing keys, accepting the download when any trusted
+  key verifies it.
+
 ### Security
 - Release signatures are now verified against an embedded trust-list of signing
   keys rather than a single key: a release is accepted if any trusted key

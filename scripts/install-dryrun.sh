@@ -12,7 +12,7 @@ cd "$repo_root"
 # The repo's .goreleaser.yml signs checksums.txt with minisign, so a
 # snapshot build needs a secret key even though we never publish it. Generate an
 # ephemeral, passwordless key just for this dry-run; it is discarded on exit and
-# never touches the embedded RELEASE_PUBKEY the script verifies against.
+# never touches the embedded RELEASE_PUBKEYS trust-list the script verifies against.
 keydir=$(mktemp -d)
 trap 'rm -rf "$keydir" "${prefix:-}"' EXIT
 minisign -G -W -p "$keydir/k.pub" -s "$keydir/k.key" >/dev/null
@@ -30,7 +30,7 @@ ver=$(goreleaser release --snapshot --clean --skip=publish 2>/dev/null >/dev/nul
 [ -n "$ver" ] || { echo "FAIL: could not read snapshot version from dist/metadata.json"; exit 1; }
 
 # The snapshot's checksums.txt.minisig is signed by the ephemeral key above, NOT
-# by the release RELEASE_PUBKEY embedded in install.sh, so a real signature
+# by any key in the release RELEASE_PUBKEYS trust-list embedded in install.sh, so a real signature
 # check could not pass. Remove it so the script takes the documented checksum-only
 # graceful-degradation path regardless of whether minisign is installed on this
 # host. The full-signature path is proven by the Go round-trip tests and the CI
