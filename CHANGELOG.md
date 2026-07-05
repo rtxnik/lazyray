@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Reproducible release builds (`-trimpath` plus commit-timestamped module stamps, byte-identical binaries per commit) and a Syft-generated SPDX SBOM (`<archive>.sbom.json`) published alongside every release archive.
+
 ### Changed
 - `scripts/install.sh` now verifies `checksums.txt.minisig` against the same
   embedded trust-list of signing keys, accepting the download when any trusted
