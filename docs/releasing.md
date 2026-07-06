@@ -85,8 +85,13 @@ sufficient, and they fail differently, so verifying both is strongest.
    downloaded archive directly:
 
    ```bash
-   gh attestation verify lazyray_<ver>_<os>_<arch>.tar.gz --repo rtxnik/lazyray
+   gh attestation verify lazyray_<ver>_<os>_<arch>.tar.gz --repo rtxnik/lazyray \
+     --signer-workflow rtxnik/lazyray/.github/workflows/release.yml
    ```
+
+   `--signer-workflow` pins the exact workflow whose OIDC identity signed the
+   attestation, so a provenance statement minted by any other workflow - even
+   one in this repository - is rejected.
 
    Attestation covers releases published under the current pipeline; releases
    before it (v1.0.0 and earlier) have no attestation, so this check fails for
@@ -147,7 +152,8 @@ lock a release before its attestation exists — the known attest/upload race).
    ```bash
    gh attestation verify \
      "$(gh release download v<next>-rc.1 --repo rtxnik/lazyray -p 'lazyray_*_linux_amd64.tar.gz' --dir /tmp/rc && echo /tmp/rc/lazyray_*_linux_amd64.tar.gz)" \
-     --repo rtxnik/lazyray
+     --repo rtxnik/lazyray \
+     --signer-workflow rtxnik/lazyray/.github/workflows/release.yml
    ```
 
    and check the auto-triggered **Post-release verify** run is green.
