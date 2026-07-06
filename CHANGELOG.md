@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `releases/latest` (used by `scripts/install.sh` and `lzr self-update`) never
   resolves to a rehearsal build.
 
+### Fixed
+- The post-release verification workflow now triggers off the completed
+  `Release` run (plus a manual dispatch fallback): releases published with the
+  workflow's own token emit no `release: published` event for other workflows,
+  so the previous trigger never fired for pipeline-published releases.
+
 ### Security
 - Release signatures are now verified against an embedded trust-list of signing
   keys rather than a single key: a release is accepted if any trusted key
