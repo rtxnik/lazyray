@@ -156,7 +156,14 @@ lock a release before its attestation exists — the known attest/upload race).
      --signer-workflow rtxnik/lazyray/.github/workflows/release.yml
    ```
 
-   and check the auto-triggered **Post-release verify** run is green.
+   and check the **Post-release verify** run is green. It chains off the
+   completed `Release` run (releases published with the workflow token emit no
+   `release: published` trigger for other workflows); re-verify any tag on
+   demand with:
+
+   ```bash
+   gh workflow run "Post-release verify" --repo rtxnik/lazyray -f tag=v<next>-rc.1
+   ```
 
 4. Tear down the rehearsal:
 

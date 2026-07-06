@@ -1,8 +1,23 @@
 name: Post-release verify
 
+# The release pipeline publishes with the workflow's own GITHUB_TOKEN, and
+# events caused by that token never trigger other workflows (GitHub's
+# recursion guard) - a bare `release: published` trigger would never fire for
+# pipeline-published releases. The primary trigger is therefore the completed
+# Release run itself; `release: published` stays for releases published by a
+# human (UI or PAT), and `workflow_dispatch` allows re-verifying any tag.
 on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to verify (e.g. v1.2.3)"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -10,6 +25,9 @@ permissions:
 jobs:
   verify:
     name: Verify published release
+    # A failed Release run published nothing (publish is its last step), so
+    # there is nothing to verify.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -17,6 +35,27 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Resolve the tag under verification
+        id: tag
+        # For tag-push-triggered runs, workflow_run.head_branch is the tag
+        # name. Values flow through env, never inline into the script.
+        env:
+          EVENT: ${{ github.event_name }}
+          RUN_TAG: ${{ github.event.workflow_run.head_branch }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          case "$EVENT" in
+            workflow_run)      tag="$RUN_TAG" ;;
+            workflow_dispatch) tag="$DISPATCH_TAG" ;;
+            *)                 tag="$RELEASE_TAG" ;;
+          esac
+          if [ -z "$tag" ]; then
+            echo "::error::could not resolve a tag for event '$EVENT'"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Install minisign
         run: |
@@ -26,5 +65,5 @@ jobs:
       - name: Verify the published release end-to-end
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ steps.tag.outputs.tag }}
         run: scripts/repo-governance/verify-release.sh "$TAG"
