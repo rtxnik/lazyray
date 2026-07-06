@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `scripts/install.sh` now verifies `checksums.txt.minisig` against the same
   embedded trust-list of signing keys, accepting the download when any trusted
   key verifies it.
+- Attestation verification (docs and the post-release verify job) now pins the
+  signer workflow (`gh attestation verify --signer-workflow`), rejecting a
+  provenance statement minted by any workflow other than the release pipeline.
+- Release-candidate tags (`v*-rc.N`) now publish as GitHub prereleases, so
+  `releases/latest` (used by `scripts/install.sh` and `lzr self-update`) never
+  resolves to a rehearsal build.
 
 ### Security
 - Release signatures are now verified against an embedded trust-list of signing

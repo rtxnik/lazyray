@@ -93,6 +93,10 @@ release:
     owner: rtxnik
     name: lazyray
   draft: true
+  # rc tags (v*-rc.N) must publish as prereleases: /releases/latest - what
+  # scripts/install.sh and `lzr self-update` resolve - skips prereleases, so
+  # a rehearsal rc never reaches ordinary users as "latest".
+  prerelease: auto
   header: |
     TUI manager for Xray proxy — [Installation](https://github.com/rtxnik/lazyray#installation)
 
