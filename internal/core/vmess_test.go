@@ -261,3 +261,31 @@ func TestParseProxyURL_Invalid(t *testing.T) {
 		t.Errorf("error should mention unsupported: %v", err)
 	}
 }
+
+func TestTrojan_IPv6RoundTripPreservesProfile(t *testing.T) {
+	p, err := ParseTrojan("trojan://pw@[2001:db8::1]:443?sni=s.example#v6")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	p2, err := ParseTrojan(ToTrojanURL(p))
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if p2.Server.Address != p.Server.Address || p2.Server.Port != p.Server.Port || p2.Server.UUID != p.Server.UUID {
+		t.Errorf("round trip mismatch: got %s:%d %s, want %s:%d %s",
+			p2.Server.Address, p2.Server.Port, p2.Server.UUID,
+			p.Server.Address, p.Server.Port, p.Server.UUID)
+	}
+}
+
+func TestToTrojanURL_IPv4AndHostnameUnchanged(t *testing.T) {
+	for _, host := range []string{"1.2.3.4", "example.com"} {
+		p, err := ParseTrojan("trojan://pw@" + host + ":443#n")
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if out := ToTrojanURL(p); !strings.Contains(out, "@"+host+":443") {
+			t.Errorf("non-IPv6 authority must stay unbracketed, got: %s", out)
+		}
+	}
+}

@@ -277,3 +277,34 @@ func TestRoundtrip_ParseAndGenerate(t *testing.T) {
 		t.Errorf("roundtrip Port mismatch: %d vs %d", p1.Server.Port, p2.Server.Port)
 	}
 }
+
+func TestVLESS_IPv6RoundTripPreservesProfile(t *testing.T) {
+	p, err := ParseVLESS("vless://11111111-1111-1111-1111-111111111111@[2001:db8::1]:443?security=reality&type=grpc&sni=s.example#v6")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	p2, err := ParseVLESS(ToVLESSURL(p))
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if p2.Server.Address != p.Server.Address || p2.Server.Port != p.Server.Port || p2.Server.UUID != p.Server.UUID {
+		t.Errorf("round trip mismatch: got %s:%d %s, want %s:%d %s",
+			p2.Server.Address, p2.Server.Port, p2.Server.UUID,
+			p.Server.Address, p.Server.Port, p.Server.UUID)
+	}
+	if out := ToVLESSURL(p); strings.Contains(out, "[[") {
+		t.Errorf("address must not be double-bracketed: %s", out)
+	}
+}
+
+func TestToVLESSURL_IPv4AndHostnameUnchanged(t *testing.T) {
+	for _, host := range []string{"1.2.3.4", "example.com"} {
+		p, err := ParseVLESS("vless://uuid-1@" + host + ":443?security=none&type=tcp#n")
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if out := ToVLESSURL(p); !strings.Contains(out, "@"+host+":443") {
+			t.Errorf("non-IPv6 authority must stay unbracketed, got: %s", out)
+		}
+	}
+}
