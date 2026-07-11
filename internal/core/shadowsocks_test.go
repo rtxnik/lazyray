@@ -345,3 +345,21 @@ func TestParseShadowsocks_LegacyQueryVariants(t *testing.T) {
 		t.Errorf("Port = %d, want 8388", p.Server.Port)
 	}
 }
+
+func TestShadowsocks_IPv6RoundTripPreservesProfile(t *testing.T) {
+	userinfo := base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString([]byte("aes-256-gcm:pw"))
+	p, err := ParseShadowsocks("ss://" + userinfo + "@[2001:db8::1]:443#v6")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	p2, err := ParseShadowsocks(ToShadowsocksURL(p))
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if p2.Server.Address != "2001:db8::1" || p2.Server.Port != 443 {
+		t.Errorf("round trip = %s:%d, want 2001:db8::1:443", p2.Server.Address, p2.Server.Port)
+	}
+	if p2.Server.UUID != "pw" || p2.Server.Encryption != "aes-256-gcm" {
+		t.Errorf("credentials mismatch: %q / %q", p2.Server.Encryption, p2.Server.UUID)
+	}
+}

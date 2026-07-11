@@ -196,7 +196,7 @@ func ToShadowsocksURL(p *config.Profile) string {
 	fragment := url.PathEscape(p.Name)
 
 	return fmt.Sprintf("ss://%s@%s:%d#%s",
-		encoded, p.Server.Address, p.Server.Port, fragment)
+		encoded, bracketIPv6(p.Server.Address), p.Server.Port, fragment)
 }
 
 // parseHostPort splits "host:port" into host and an integer port.
