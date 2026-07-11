@@ -36,15 +36,28 @@ func ParseShadowsocks(rawURL string) (*config.Profile, error) {
 	var method, password, host string
 	var port int
 
-	// Try SIP002 format: base64(method:password)@host:port
+	// Try SIP002 format: base64(method:password)@host:port[/][?plugin=...]
 	if atIdx := strings.LastIndex(body, "@"); atIdx >= 0 {
 		userinfo := body[:atIdx]
 		hostPort := body[atIdx+1:]
 
+		// SIP002 allows an optional "/" path and "?plugin=..." query after
+		// the port. Both are cut from the hostPort slice only: lenient
+		// plaintext userinfo may carry a raw '?' or '/' and must survive.
+		rawQuery := ""
+		if i := strings.Index(hostPort, "?"); i >= 0 {
+			rawQuery = hostPort[i+1:]
+			hostPort = hostPort[:i]
+		}
+		if i := strings.Index(hostPort, "/"); i >= 0 {
+			hostPort = hostPort[:i]
+		}
+
 		// Try base64 decode the userinfo
 		decodedBytes, err := decodeBase64Any(userinfo)
 		dec := string(decodedBytes)
-		if err != nil {
+		plaintext := err != nil
+		if plaintext {
 			// Not base64, try plaintext method:password
 			dec = userinfo
 		}
@@ -55,14 +68,35 @@ func ParseShadowsocks(rawURL string) (*config.Profile, error) {
 		}
 		method = parts[0]
 		password = parts[1]
+		if plaintext {
+			// Plain userinfo is percent-encoded per SIP002; keep the raw
+			// value when unescaping fails, matching the fragment handling.
+			if m, err := url.PathUnescape(method); err == nil {
+				method = m
+			}
+			if pw, err := url.PathUnescape(password); err == nil {
+				password = pw
+			}
+		}
 
 		// Parse host:port
 		host, port, err = parseHostPort(hostPort)
 		if err != nil {
 			return nil, fmt.Errorf("invalid Shadowsocks host:port: %w", err)
 		}
+
+		if err := rejectSSPlugin(rawQuery); err != nil {
+			return nil, err
+		}
 	} else {
-		// Legacy format: base64(method:password@host:port)
+		// Legacy format: base64(method:password@host:port), possibly with a
+		// trailing "?..." query ('?' never occurs in base64 text).
+		rawQuery := ""
+		if i := strings.Index(body, "?"); i >= 0 {
+			rawQuery = body[i+1:]
+			body = body[:i]
+		}
+
 		decodedBytes, err := decodeBase64Any(body)
 		if err != nil {
 			return nil, fmt.Errorf("invalid Shadowsocks URL: cannot decode body")
@@ -84,6 +118,10 @@ func ParseShadowsocks(rawURL string) (*config.Profile, error) {
 		host, port, err = parseHostPort(dec[atIdx+1:])
 		if err != nil {
 			return nil, fmt.Errorf("invalid Shadowsocks host:port: %w", err)
+		}
+
+		if err := rejectSSPlugin(rawQuery); err != nil {
+			return nil, err
 		}
 	}
 
@@ -131,6 +169,24 @@ func ParseShadowsocks(rawURL string) (*config.Profile, error) {
 	}
 
 	return profile, nil
+}
+
+// rejectSSPlugin returns an explicit error when a SIP002 query requests a
+// plugin: silently dropping it would store a profile that cannot connect.
+// An empty or unparseable query is treated as absent, matching the parser's
+// lenient posture elsewhere.
+func rejectSSPlugin(rawQuery string) error {
+	if rawQuery == "" {
+		return nil
+	}
+	q, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return nil
+	}
+	if plugin := q.Get("plugin"); plugin != "" {
+		return fmt.Errorf("SIP002 plugin %q is not supported", plugin)
+	}
+	return nil
 }
 
 // ToShadowsocksURL converts a Profile back to a Shadowsocks URL (SIP002 format).
