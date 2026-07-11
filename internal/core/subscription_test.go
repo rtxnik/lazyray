@@ -270,3 +270,45 @@ func TestFetchSubscription_RejectsHTTP(t *testing.T) {
 		t.Errorf("error %q should mention https", err.Error())
 	}
 }
+
+func TestParseSubscriptionBody_AllBase64Variants(t *testing.T) {
+	line := "vless://11111111-1111-1111-1111-111111111111@h.example.com:443?type=tcp&security=none#nn"
+	encodings := map[string]string{
+		"std":     base64.StdEncoding.EncodeToString([]byte(line)),
+		"raw-std": base64.RawStdEncoding.EncodeToString([]byte(line)),
+		"url":     base64.URLEncoding.EncodeToString([]byte(line)),
+		"raw-url": base64.RawURLEncoding.EncodeToString([]byte(line)),
+	}
+	for name, body := range encodings {
+		t.Run(name, func(t *testing.T) {
+			profiles, err := ParseSubscriptionBody(body)
+			if err != nil {
+				t.Fatalf("%s-encoded body should decode, got: %v", name, err)
+			}
+			if len(profiles) != 1 {
+				t.Fatalf("profiles = %d, want 1", len(profiles))
+			}
+			if profiles[0].Server.Address != "h.example.com" {
+				t.Errorf("Address = %q", profiles[0].Server.Address)
+			}
+		})
+	}
+}
+
+func TestParseSubscriptionBody_PlaintextStillAccepted(t *testing.T) {
+	body := "vless://11111111-1111-1111-1111-111111111111@a.example.com:443?type=tcp&security=none#a\n" +
+		"trojan://pw@b.example.com:443#b\n"
+	profiles, err := ParseSubscriptionBody(body)
+	if err != nil {
+		t.Fatalf("plaintext body should parse, got: %v", err)
+	}
+	if len(profiles) != 2 {
+		t.Fatalf("profiles = %d, want 2", len(profiles))
+	}
+}
+
+func TestParseSubscriptionBody_GarbageStillErrors(t *testing.T) {
+	if _, err := ParseSubscriptionBody("!!!neither base64 nor URLs!!!"); err == nil {
+		t.Fatal("garbage body must keep erroring")
+	}
+}

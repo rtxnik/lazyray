@@ -257,3 +257,109 @@ func TestParseProxyURL_Shadowsocks(t *testing.T) {
 		t.Errorf("Protocol = %q, want shadowsocks", p.Server.GetProtocol())
 	}
 }
+
+func TestParseShadowsocks_QueryAndPathVariants(t *testing.T) {
+	userinfo := base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString([]byte("aes-256-gcm:pass"))
+	cases := []struct {
+		name   string
+		rawURL string
+	}{
+		{"bare question mark", "ss://" + userinfo + "@1.2.3.4:8388?#n"},
+		{"empty plugin value", "ss://" + userinfo + "@1.2.3.4:8388/?plugin=#n"},
+		{"ipv6 with trailing slash", "ss://" + userinfo + "@[2001:db8::1]:8388/#n"},
+		{"non-plugin query", "ss://" + userinfo + "@1.2.3.4:8388/?group=abc#n"},
+		{"unparseable query kept lenient", "ss://" + userinfo + "@1.2.3.4:8388/?%zz=1#n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := ParseShadowsocks(tc.rawURL)
+			if err != nil {
+				t.Fatalf("should parse, got: %v", err)
+			}
+			if p.Server.Port != 8388 {
+				t.Errorf("Port = %d, want 8388", p.Server.Port)
+			}
+		})
+	}
+}
+
+func TestParseShadowsocks_PlaintextLiteralSpecials(t *testing.T) {
+	// RFC-invalid but accepted before this change: literal '?' and '/' in a
+	// plaintext password must keep parsing to the same profile.
+	cases := []struct {
+		name, rawURL, wantPassword string
+	}{
+		{"literal question mark", "ss://aes-256-gcm:p?ss@example.com:8388#n", "p?ss"},
+		{"literal slash", "ss://aes-256-gcm:p/ss@example.com:8388#n", "p/ss"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := ParseShadowsocks(tc.rawURL)
+			if err != nil {
+				t.Fatalf("should parse, got: %v", err)
+			}
+			if p.Server.UUID != tc.wantPassword {
+				t.Errorf("password = %q, want %q", p.Server.UUID, tc.wantPassword)
+			}
+			if p.Server.Port != 8388 {
+				t.Errorf("Port = %d, want 8388", p.Server.Port)
+			}
+		})
+	}
+}
+
+func TestParseShadowsocks_PlaintextPercentDecoding(t *testing.T) {
+	// Percent-encoded method decodes; an invalid escape keeps the raw value
+	// (lenient, mirrors the fragment handling).
+	p, err := ParseShadowsocks("ss://aes-256%2Dgcm:pw@example.com:8388#n")
+	if err != nil {
+		t.Fatalf("should parse, got: %v", err)
+	}
+	if p.Server.Encryption != "aes-256-gcm" {
+		t.Errorf("method = %q, want aes-256-gcm (percent-decoded)", p.Server.Encryption)
+	}
+
+	p, err = ParseShadowsocks("ss://aes-256-gcm:p%zzss@example.com:8388#n")
+	if err != nil {
+		t.Fatalf("invalid escape must stay lenient, got: %v", err)
+	}
+	if p.Server.UUID != "p%zzss" {
+		t.Errorf("password = %q, want raw %q (unescape failed, keep raw)", p.Server.UUID, "p%zzss")
+	}
+}
+
+func TestParseShadowsocks_LegacyQueryVariants(t *testing.T) {
+	legacy := base64.StdEncoding.EncodeToString([]byte("aes-256-gcm:pass@9.9.9.9:8388"))
+
+	if _, err := ParseShadowsocks("ss://" + legacy + "?plugin=obfs#n"); err == nil {
+		t.Fatal("legacy link with plugin= must be rejected explicitly")
+	} else if !strings.Contains(err.Error(), "plugin") {
+		t.Fatalf("error should name the plugin, got: %v", err)
+	}
+
+	p, err := ParseShadowsocks("ss://" + legacy + "?foo=1#n")
+	if err != nil {
+		t.Fatalf("legacy link with benign query should parse, got: %v", err)
+	}
+	if p.Server.Port != 8388 {
+		t.Errorf("Port = %d, want 8388", p.Server.Port)
+	}
+}
+
+func TestShadowsocks_IPv6RoundTripPreservesProfile(t *testing.T) {
+	userinfo := base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString([]byte("aes-256-gcm:pw"))
+	p, err := ParseShadowsocks("ss://" + userinfo + "@[2001:db8::1]:443#v6")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	p2, err := ParseShadowsocks(ToShadowsocksURL(p))
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if p2.Server.Address != "2001:db8::1" || p2.Server.Port != 443 {
+		t.Errorf("round trip = %s:%d, want 2001:db8::1:443", p2.Server.Address, p2.Server.Port)
+	}
+	if p2.Server.UUID != "pw" || p2.Server.Encryption != "aes-256-gcm" {
+		t.Errorf("credentials mismatch: %q / %q", p2.Server.Encryption, p2.Server.UUID)
+	}
+}

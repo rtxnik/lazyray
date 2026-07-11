@@ -32,6 +32,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Release` run (plus a manual dispatch fallback): releases published with the
   workflow's own token emit no `release: published` event for other workflows,
   so the previous trigger never fired for pipeline-published releases.
+- Shadowsocks SIP002 links with a trailing slash or query (`…:8388/`,
+  `…/?plugin=…`) no longer fail to parse, and a `plugin=` requirement is
+  rejected with an explicit message instead of a confusing port error.
+- Shadowsocks plaintext userinfo is percent-decoded per SIP002, so passwords
+  with encoded special characters (e.g. `p%40ss`) are stored correctly.
+- VLESS, Trojan, and Shadowsocks share links bracket IPv6 hosts on export;
+  previously the exported URL was malformed and could not be re-imported.
+- Subscription bodies encoded with unpadded URL-safe base64 now decode
+  instead of failing with "no valid proxy URLs found in subscription".
+- Hysteria2 share links keep the base port when a port-hopping range is set
+  (exported as `443,5000-6000`), so export→import no longer changes the
+  connection port.
 
 ### Security
 - `lzr config backup` now encrypts archives by default — backups bundle

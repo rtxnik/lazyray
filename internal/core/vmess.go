@@ -273,6 +273,6 @@ func ToTrojanURL(p *config.Profile) string {
 	}
 
 	return fmt.Sprintf("trojan://%s@%s:%d%s#%s",
-		p.Server.UUID, p.Server.Address, p.Server.Port,
+		p.Server.UUID, bracketIPv6(p.Server.Address), p.Server.Port,
 		query, fragment)
 }
