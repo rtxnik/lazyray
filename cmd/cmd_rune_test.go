@@ -333,6 +333,7 @@ func TestConfigBackupCmd_RunE(t *testing.T) {
 	defer cleanup()
 	writeTestServers(t)
 	writeTestSettings(t)
+	t.Setenv(passphraseEnvVar, "test-backup-pass")
 
 	// Backup to a specific file
 	outPath := filepath.Join(t.TempDir(), "backup.tar.gz")
@@ -351,6 +352,7 @@ func TestConfigBackupCmd_RunE_DefaultPath(t *testing.T) {
 	cleanup := setupTestHome(t)
 	defer cleanup()
 	writeTestServers(t)
+	t.Setenv(passphraseEnvVar, "test-backup-pass")
 
 	err := configBackupCmd.RunE(configBackupCmd, []string{})
 	if err != nil {

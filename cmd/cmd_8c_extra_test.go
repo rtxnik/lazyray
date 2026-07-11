@@ -184,6 +184,7 @@ func TestConfigRestoreCmd_RunE(t *testing.T) {
 	defer cleanup()
 	writeTestServers(t)
 	writeTestSettings(t)
+	t.Setenv(passphraseEnvVar, "test-backup-pass")
 
 	// Create backup first
 	backupPath := filepath.Join(t.TempDir(), "backup.tar.gz")

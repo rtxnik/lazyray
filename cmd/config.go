@@ -2,17 +2,21 @@ package cmd
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/rtxnik/lazyray/internal/config"
 	"github.com/rtxnik/lazyray/internal/core"
+	"github.com/rtxnik/lazyray/internal/fsutil"
 	"github.com/spf13/cobra"
 )
 
@@ -185,24 +189,48 @@ var configDeleteCmd = &cobra.Command{
 	},
 }
 
+var (
+	backupNoEncrypt       bool
+	backupPassphraseFile  string
+	restorePassphraseFile string
+)
+
 var configBackupCmd = &cobra.Command{
 	Use:   "backup [file]",
-	Short: "Backup configuration to tar.gz archive",
-	Long:  `Write a tar.gz archive of the profile store and the generated xray config (servers.yaml, lazyray.yaml, config.json). Without a path, the archive lands in the backup directory with a timestamped name and old backups are rotated. Use it before risky edits or to move your setup to another machine.`,
+	Short: "Backup configuration to an encrypted archive",
+	Long:  `Write an archive of the profile store and the generated xray config (servers.yaml, lazyray.yaml, config.json). Archives are encrypted by default because they bundle proxy credentials; the passphrase comes from --passphrase-file, the LAZYRAY_PASSPHRASE environment variable, or an interactive prompt. Pass --no-encrypt for a plaintext tar.gz. Without a path, the archive lands in the backup directory with a timestamped name and old backups are rotated.`,
 	Example: `  lzr config backup
-  lzr config backup ~/lazyray-backup.tar.gz`,
+  lzr config backup ~/lazyray-backup.tar.gz.enc
+  lzr config backup --no-encrypt ~/lazyray-backup.tar.gz
+  LAZYRAY_PASSPHRASE=secret lzr config backup`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := config.EnsureDirs(); err != nil {
 			return err
 		}
 
+		var passphrase string
+		if !backupNoEncrypt {
+			var err error
+			passphrase, err = resolvePassphrase(backupPassphraseFile, true)
+			if errors.Is(err, errNoPassphraseSource) {
+				return fmt.Errorf("backups are encrypted by default: provide --passphrase-file, set %s, run interactively, or pass --no-encrypt", passphraseEnvVar)
+			}
+			if err != nil {
+				return err
+			}
+		}
+
 		outPath := ""
 		if len(args) > 0 {
 			outPath = args[0]
 		} else {
+			ext := ".tar.gz.enc"
+			if backupNoEncrypt {
+				ext = ".tar.gz"
+			}
 			ts := time.Now().Format("20060102-150405")
-			outPath = filepath.Join(config.BackupDir(), fmt.Sprintf("lazyray-backup-%s.tar.gz", ts))
+			outPath = filepath.Join(config.BackupDir(), fmt.Sprintf("lazyray-backup-%s%s", ts, ext))
 		}
 
 		files := []struct {
@@ -214,18 +242,9 @@ var configBackupCmd = &cobra.Command{
 			{config.XrayConfigPath(), "config.json"},
 		}
 
-		f, err := os.Create(outPath)
-		if err != nil {
-			return fmt.Errorf("creating backup file: %w", err)
-		}
-		defer f.Close()
-
-		gw := gzip.NewWriter(f)
-		defer gw.Close()
-
+		var buf bytes.Buffer
+		gw := gzip.NewWriter(&buf)
 		tw := tar.NewWriter(gw)
-		defer tw.Close()
-
 		for _, file := range files {
 			data, err := os.ReadFile(file.path)
 			if err != nil {
@@ -234,7 +253,6 @@ var configBackupCmd = &cobra.Command{
 				}
 				return fmt.Errorf("reading %s: %w", file.name, err)
 			}
-
 			hdr := &tar.Header{
 				Name: file.name,
 				Mode: 0600,
@@ -247,8 +265,30 @@ var configBackupCmd = &cobra.Command{
 				return fmt.Errorf("writing tar data for %s: %w", file.name, err)
 			}
 		}
+		if err := tw.Close(); err != nil {
+			return fmt.Errorf("finalizing archive: %w", err)
+		}
+		if err := gw.Close(); err != nil {
+			return fmt.Errorf("finalizing archive: %w", err)
+		}
 
-		fmt.Printf("Backup saved to: %s\n", outPath)
+		out := buf.Bytes()
+		note := ""
+		if !backupNoEncrypt {
+			blob, err := core.EncryptData(out, passphrase)
+			if err != nil {
+				return fmt.Errorf("encrypting backup: %w", err)
+			}
+			out = []byte(blob + "\n")
+			note = " (encrypted)"
+		}
+		// 0600 + atomic rename: never world-readable, never follows a
+		// planted symlink at the destination.
+		if err := fsutil.WriteFile(outPath, out, 0o600); err != nil {
+			return fmt.Errorf("writing backup file: %w", err)
+		}
+
+		fmt.Printf("Backup saved to: %s%s\n", outPath, note)
 
 		// Rotate old backups
 		settings, _ := config.LoadSettings()
@@ -263,9 +303,9 @@ var configBackupCmd = &cobra.Command{
 
 var configRestoreCmd = &cobra.Command{
 	Use:   "restore <file>",
-	Short: "Restore configuration from tar.gz archive",
-	Long:  `Restore the profile store and the generated xray config from a tar.gz archive made by 'lzr config backup'. Recognized members (servers.yaml, lazyray.yaml, config.json) overwrite the current files. Use it to recover a setup or replicate it on another machine.`,
-	Example: `  lzr config restore ~/lazyray-backup.tar.gz
+	Short: "Restore configuration from a backup archive",
+	Long:  `Restore the profile store and the generated xray config from an archive made by 'lzr config backup'. Encrypted archives are detected automatically; the passphrase comes from --passphrase-file, the LAZYRAY_PASSPHRASE environment variable, or an interactive prompt. Plain tar.gz archives from older versions restore without a passphrase. Recognized members (servers.yaml, lazyray.yaml, config.json) overwrite the current files.`,
+	Example: `  lzr config restore ~/lazyray-backup.tar.gz.enc
   lzr config restore ./lazyray-backup-20260101-120000.tar.gz`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -273,13 +313,30 @@ var configRestoreCmd = &cobra.Command{
 			return err
 		}
 
-		f, err := os.Open(args[0])
+		raw, err := os.ReadFile(args[0])
 		if err != nil {
 			return fmt.Errorf("opening backup file: %w", err)
 		}
-		defer f.Close()
 
-		gr, err := gzip.NewReader(f)
+		// Sniff a trimmed view for the encryption prefix, but feed the
+		// ORIGINAL bytes to gzip when plaintext: a binary stream may
+		// legitimately end in whitespace-valued bytes.
+		archive := raw
+		if blob := strings.TrimSpace(string(raw)); core.IsEncryptedExport(blob) {
+			passphrase, perr := resolvePassphrase(restorePassphraseFile, false)
+			if errors.Is(perr, errNoPassphraseSource) {
+				return fmt.Errorf("this backup is encrypted: provide --passphrase-file, set %s, or run interactively", passphraseEnvVar)
+			}
+			if perr != nil {
+				return perr
+			}
+			archive, err = core.DecryptData(blob, passphrase)
+			if err != nil {
+				return fmt.Errorf("decrypting backup: %w", err)
+			}
+		}
+
+		gr, err := gzip.NewReader(bytes.NewReader(archive))
 		if err != nil {
 			return fmt.Errorf("reading gzip: %w", err)
 		}
@@ -313,7 +370,9 @@ var configRestoreCmd = &cobra.Command{
 				return fmt.Errorf("reading %s from archive: %w", hdr.Name, err)
 			}
 
-			if err := os.WriteFile(destPath, data, 0600); err != nil {
+			// Atomic rename replaces a planted symlink instead of
+			// following it.
+			if err := fsutil.WriteFile(destPath, data, 0o600); err != nil {
 				return fmt.Errorf("writing %s: %w", hdr.Name, err)
 			}
 
@@ -373,6 +432,9 @@ var configDuplicateCmd = &cobra.Command{
 
 func init() {
 	configListCmd.Flags().Bool("json", false, "Output in JSON format")
+	configBackupCmd.Flags().BoolVar(&backupNoEncrypt, "no-encrypt", false, "Write a plaintext archive instead of an encrypted one")
+	configBackupCmd.Flags().StringVar(&backupPassphraseFile, "passphrase-file", "", "Read the encryption passphrase from the first line of this file")
+	configRestoreCmd.Flags().StringVar(&restorePassphraseFile, "passphrase-file", "", "Read the decryption passphrase from the first line of this file")
 	configCmd.AddCommand(configShowCmd, configListCmd, configSwitchCmd, configEditCmd, configDeleteCmd, configBackupCmd, configRestoreCmd, configDuplicateCmd)
 	rootCmd.AddCommand(configCmd)
 }
