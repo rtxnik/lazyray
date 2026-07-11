@@ -41,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--no-encrypt` restores the old plaintext behavior (scripted,
   non-interactive backups must now pass one of these). Archives are written
   `0600` via atomic rename either way.
+- The default backup filename now ends in `.tar.gz.enc` when encrypted;
+  scripts that glob `lazyray-backup-*.tar.gz` should be updated (rotation is
+  unaffected). `--no-encrypt` and `--passphrase-file` are now mutually
+  exclusive flags.
 - `lzr config restore` no longer follows a symlink planted at a destination
   path: restored files replace the destination atomically.
 - Encrypted profile exports upgraded from PBKDF2 (100k iterations) to

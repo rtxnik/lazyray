@@ -256,6 +256,28 @@ func TestBackup_DefaultFilenameExtension(t *testing.T) {
 	}
 }
 
+// --no-encrypt with an explicit passphrase source is a contradiction, not a
+// silent plaintext downgrade.
+func TestBackup_NoEncryptExcludesPassphraseFile(t *testing.T) {
+	if err := configBackupCmd.Flags().Set("no-encrypt", "true"); err != nil {
+		t.Fatal(err)
+	}
+	if err := configBackupCmd.Flags().Set("passphrase-file", "/tmp/whatever"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = configBackupCmd.Flags().Set("no-encrypt", "false")
+		_ = configBackupCmd.Flags().Set("passphrase-file", "")
+		backupNoEncrypt = false
+		backupPassphraseFile = ""
+		configBackupCmd.Flags().Lookup("no-encrypt").Changed = false
+		configBackupCmd.Flags().Lookup("passphrase-file").Changed = false
+	})
+	if err := configBackupCmd.ValidateFlagGroups(); err == nil {
+		t.Fatal("no-encrypt + passphrase-file must be mutually exclusive")
+	}
+}
+
 // Wrong passphrase fails without touching the current config.
 func TestRestore_WrongPassphraseTouchesNothing(t *testing.T) {
 	cleanup := setupTestHome(t)

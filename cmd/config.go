@@ -435,6 +435,7 @@ func init() {
 	configBackupCmd.Flags().BoolVar(&backupNoEncrypt, "no-encrypt", false, "Write a plaintext archive instead of an encrypted one")
 	configBackupCmd.Flags().StringVar(&backupPassphraseFile, "passphrase-file", "", "Read the encryption passphrase from the first line of this file")
 	configRestoreCmd.Flags().StringVar(&restorePassphraseFile, "passphrase-file", "", "Read the decryption passphrase from the first line of this file")
+	configBackupCmd.MarkFlagsMutuallyExclusive("no-encrypt", "passphrase-file")
 	configCmd.AddCommand(configShowCmd, configListCmd, configSwitchCmd, configEditCmd, configDeleteCmd, configBackupCmd, configRestoreCmd, configDuplicateCmd)
 	rootCmd.AddCommand(configCmd)
 }
