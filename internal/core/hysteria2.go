@@ -142,8 +142,14 @@ func ToHysteria2URL(p *config.Profile) string {
 	}
 	host := bracketIPv6(p.Server.Address)
 	portPart := strconv.Itoa(p.Server.Port)
-	if p.Server.PortHopping != "" {
-		portPart = p.Server.PortHopping // inline multi-port per the hysteria2 URI spec
+	if hop := p.Server.PortHopping; hop != "" {
+		if base, err := hopBasePort(hop); err == nil && base == p.Server.Port {
+			portPart = hop // spec already leads with the base port
+		} else {
+			// Emit base port + hop set losslessly ("443,5000-6000"); re-parse
+			// recovers the base via the same hopBasePort derivation.
+			portPart = strconv.Itoa(p.Server.Port) + "," + hop
+		}
 	}
 	return fmt.Sprintf("hysteria2://%s@%s:%s%s#%s",
 		p.Server.UUID, host, portPart, query, url.PathEscape(p.Name))

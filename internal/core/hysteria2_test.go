@@ -1,6 +1,11 @@
 package core
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/rtxnik/lazyray/internal/config"
+)
 
 func TestParseHysteria2_Full(t *testing.T) {
 	raw := "hysteria2://secretauth@example.com:29347?alpn=h3&fp=chrome&obfs=salamander&obfs-password=obfspw&security=tls&sni=real.example.com#hy2-exit"
@@ -171,5 +176,46 @@ func TestHopBasePort(t *testing.T) {
 		if (err != nil) != c.wantErr || got != c.want {
 			t.Errorf("hopBasePort(%q) = (%d, %v), want (%d, wantErr=%v)", c.in, got, err, c.want, c.wantErr)
 		}
+	}
+}
+
+func TestToHysteria2URL_HopPortVariants(t *testing.T) {
+	mk := func(port int, hop string) *config.Profile {
+		return &config.Profile{
+			Name: "n",
+			Server: config.ServerConfig{
+				Address: "h", Port: port, UUID: "pw", Protocol: "hysteria2",
+				PortHopping: hop,
+				Transport:   config.TransportConfig{Network: "hysteria"},
+				Security:    config.SecurityConfig{Type: "tls", SNI: "h"},
+			},
+		}
+	}
+	cases := []struct {
+		name     string
+		port     int
+		hop      string
+		wantAuth string
+	}{
+		{"pure range with matching base", 5000, "5000-6000", "@h:5000-6000"},
+		{"spec already leads with base", 443, "443,5000-6000", "@h:443,5000-6000"},
+		{"base differs from range", 443, "5000-6000", "@h:443,5000-6000"},
+		{"no hopping", 443, "", "@h:443"},
+		{"malformed hop falls back to prepend", 443, "x-y", "@h:443,x-y"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := ToHysteria2URL(mk(tc.port, tc.hop))
+			if !strings.Contains(out, tc.wantAuth) {
+				t.Fatalf("export = %s, want authority %q", out, tc.wantAuth)
+			}
+			p2, err := ParseHysteria2(out)
+			if err != nil {
+				t.Fatalf("re-parse: %v", err)
+			}
+			if p2.Server.Port != tc.port {
+				t.Errorf("re-parsed base Port = %d, want %d", p2.Server.Port, tc.port)
+			}
+		})
 	}
 }
