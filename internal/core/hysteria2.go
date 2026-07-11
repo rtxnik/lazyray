@@ -140,16 +140,27 @@ func ToHysteria2URL(p *config.Profile) string {
 	if query != "" {
 		query = "?" + query
 	}
-	host := p.Server.Address
-	if strings.ContainsRune(host, ':') {
-		host = "[" + host + "]" // bracket IPv6 literals (RFC 3986)
-	}
+	host := bracketIPv6(p.Server.Address)
 	portPart := strconv.Itoa(p.Server.Port)
 	if p.Server.PortHopping != "" {
 		portPart = p.Server.PortHopping // inline multi-port per the hysteria2 URI spec
 	}
 	return fmt.Sprintf("hysteria2://%s@%s:%s%s#%s",
 		p.Server.UUID, host, portPart, query, url.PathEscape(p.Name))
+}
+
+// hopBasePort returns the leading single port of a multi-port hopping spec
+// ("443,5000-6000" -> 443, "5000-6000" -> 5000). Shared by parse and export
+// so an exported authority always re-parses to the same base port.
+func hopBasePort(spec string) (int, error) {
+	base := spec
+	if comma := strings.Index(base, ","); comma >= 0 {
+		base = base[:comma]
+	}
+	if dash := strings.Index(base, "-"); dash >= 0 {
+		base = base[:dash]
+	}
+	return strconv.Atoi(base)
 }
 
 // parseHysteriaHostPort splits a hysteria2 authority into host, base port, and
@@ -170,14 +181,7 @@ func parseHysteriaHostPort(s string) (host string, port int, hop string, err err
 	if strings.ContainsAny(portSpec, ",-") {
 		hop = portSpec
 	}
-	base := portSpec
-	if comma := strings.Index(base, ","); comma >= 0 {
-		base = base[:comma]
-	}
-	if dash := strings.Index(base, "-"); dash >= 0 {
-		base = base[:dash]
-	}
-	port, e := strconv.Atoi(base)
+	port, e := hopBasePort(portSpec)
 	if e != nil {
 		return "", 0, "", fmt.Errorf("invalid port %q in Hysteria2 URL", portSpec)
 	}

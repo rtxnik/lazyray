@@ -85,3 +85,18 @@ func TestParseUserinfoURL(t *testing.T) {
 		t.Error("expected prefix-mismatch error")
 	}
 }
+
+func TestBracketIPv6(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"2001:db8::1", "[2001:db8::1]"},
+		{"[2001:db8::1]", "[2001:db8::1]"},
+		{"1.2.3.4", "1.2.3.4"},
+		{"example.com", "example.com"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := bracketIPv6(c.in); got != c.want {
+			t.Errorf("bracketIPv6(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

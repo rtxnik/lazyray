@@ -72,6 +72,15 @@ func parseUserinfoURL(scheme, display, raw string) (*url.URL, error) {
 	return u, nil
 }
 
+// bracketIPv6 wraps an IPv6 literal in brackets for use in a URL authority
+// (RFC 3986). Hosts without ':' and already-bracketed literals pass through.
+func bracketIPv6(host string) string {
+	if strings.ContainsRune(host, ':') && !strings.HasPrefix(host, "[") {
+		return "[" + host + "]"
+	}
+	return host
+}
+
 // decodeBase64Any decodes s under standard and URL base64, padded or raw,
 // returning the first success. Covers v2rayN VMess payloads (standard) and
 // SIP002 Shadowsocks userinfo (URL, no padding).

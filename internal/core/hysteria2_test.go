@@ -153,3 +153,23 @@ func TestToHysteria2URL_PinAndHopRoundtrip(t *testing.T) {
 		t.Error("insecure must not be set when pin is present")
 	}
 }
+
+func TestHopBasePort(t *testing.T) {
+	cases := []struct {
+		in      string
+		want    int
+		wantErr bool
+	}{
+		{"443", 443, false},
+		{"443,5000-6000", 443, false},
+		{"5000-6000", 5000, false},
+		{"x-y", 0, true},
+		{"", 0, true},
+	}
+	for _, c := range cases {
+		got, err := hopBasePort(c.in)
+		if (err != nil) != c.wantErr || got != c.want {
+			t.Errorf("hopBasePort(%q) = (%d, %v), want (%d, wantErr=%v)", c.in, got, err, c.want, c.wantErr)
+		}
+	}
+}
