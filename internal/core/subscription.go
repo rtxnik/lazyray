@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,17 +41,12 @@ func ParseSubscriptionBody(body string) ([]*config.Profile, error) {
 		return nil, fmt.Errorf("empty subscription body")
 	}
 
-	// Try base64 decode (standard and URL-safe)
-	decoded, err := base64.StdEncoding.DecodeString(body)
+	// Decode base64 (standard or URL-safe, padded or raw). Genuine plaintext
+	// bodies always fail every decoder — proxy URLs contain ':', which no
+	// base64 alphabet includes — and fall through unchanged.
+	decoded, err := decodeBase64Any(body)
 	if err != nil {
-		decoded, err = base64.RawStdEncoding.DecodeString(body)
-		if err != nil {
-			decoded, err = base64.URLEncoding.DecodeString(body)
-			if err != nil {
-				// If all base64 decoding fails, treat as plain text
-				decoded = []byte(body)
-			}
-		}
+		decoded = []byte(body)
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(decoded)), "\n")
