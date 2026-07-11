@@ -34,6 +34,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so the previous trigger never fired for pipeline-published releases.
 
 ### Security
+- `lzr config backup` now encrypts archives by default — backups bundle
+  proxy credentials, and plaintext archives were previously created
+  world-readable. The passphrase comes from `--passphrase-file`, the
+  `LAZYRAY_PASSPHRASE` environment variable, or an interactive prompt;
+  `--no-encrypt` restores the old plaintext behavior (scripted,
+  non-interactive backups must now pass one of these). Archives are written
+  `0600` via atomic rename either way.
+- The default backup filename now ends in `.tar.gz.enc` when encrypted;
+  scripts that glob `lazyray-backup-*.tar.gz` should be updated (rotation is
+  unaffected). `--no-encrypt` and `--passphrase-file` are now mutually
+  exclusive flags.
+- `lzr config restore` no longer follows a symlink planted at a destination
+  path: restored files replace the destination atomically.
+- Encrypted profile exports upgraded from PBKDF2 (100k iterations) to
+  Argon2id with parameters stored in the container (`LZRENC2`); `LZRENC1`
+  exports from older versions still import. Older lazyray versions cannot
+  read `LZRENC2` data.
+- `stats.json` is written `0600`, and freshly created config/data/log/backup
+  directories are `0700`.
 - Release signatures are now verified against an embedded trust-list of signing
   keys rather than a single key: a release is accepted if any trusted key
   verifies its signature. The in-binary self-updater is now rotation-ready with

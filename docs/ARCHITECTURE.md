@@ -409,6 +409,7 @@ graph TD
     cmd --> config
     cmd --> core
     cmd --> doctor
+    cmd --> fsutil
     cmd --> lifecycle
     cmd --> platform
     cmd --> release

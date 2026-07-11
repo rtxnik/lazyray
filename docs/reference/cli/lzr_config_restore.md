@@ -1,10 +1,10 @@
 ## lzr config restore
 
-Restore configuration from tar.gz archive
+Restore configuration from a backup archive
 
 ### Synopsis
 
-Restore the profile store and the generated xray config from a tar.gz archive made by 'lzr config backup'. Recognized members (servers.yaml, lazyray.yaml, config.json) overwrite the current files. Use it to recover a setup or replicate it on another machine.
+Restore the profile store and the generated xray config from an archive made by 'lzr config backup'. Encrypted archives are detected automatically; the passphrase comes from --passphrase-file, the LAZYRAY_PASSPHRASE environment variable, or an interactive prompt. Plain tar.gz archives from older versions restore without a passphrase. Recognized members (servers.yaml, lazyray.yaml, config.json) overwrite the current files.
 
 ```
 lzr config restore <file> [flags]
@@ -13,14 +13,15 @@ lzr config restore <file> [flags]
 ### Examples
 
 ```
-  lzr config restore ~/lazyray-backup.tar.gz
+  lzr config restore ~/lazyray-backup.tar.gz.enc
   lzr config restore ./lazyray-backup-20260101-120000.tar.gz
 ```
 
 ### Options
 
 ```
-  -h, --help   help for restore
+  -h, --help                     help for restore
+      --passphrase-file string   Read the decryption passphrase from the first line of this file
 ```
 
 ### SEE ALSO

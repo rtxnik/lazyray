@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/rtxnik/lazyray/internal/config"
+	"github.com/rtxnik/lazyray/internal/fsutil"
 )
 
 // DailyStats holds traffic consumption for a single day.
@@ -71,7 +72,7 @@ func (sm *StatsManager) saveLocked() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(config.StatsPath(), data, 0644)
+	return fsutil.WriteFile(config.StatsPath(), data, 0o600)
 }
 
 // RecordTraffic updates the traffic history with current xray stats.
