@@ -120,7 +120,7 @@ func EnsureDirs() error {
 		BackupDir(),
 	}
 	for _, d := range dirs {
-		if err := os.MkdirAll(d, 0755); err != nil {
+		if err := os.MkdirAll(d, 0700); err != nil {
 			return err
 		}
 	}
