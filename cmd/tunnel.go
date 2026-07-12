@@ -88,6 +88,11 @@ func tunnelTrust(servers *config.ServersConfig, target string, fingerprints []st
 	if err := core.ValidateSSHTarget(p.SSH.User, p.SSH.Host); err != nil {
 		return err
 	}
+	if len(fingerprints) == 0 && !stdinIsTerminal() {
+		return clihint.Errorf(
+			"pass --fingerprint SHA256:... for non-interactive pinning",
+			"refusing to pin without confirmation")
+	}
 	captured, err := core.CaptureHostKeys(p.SSH.Host, p.SSH.Port)
 	if err != nil {
 		return fmt.Errorf("cannot reach %s to capture its host key: %w", p.SSH.Host, err)
@@ -100,11 +105,6 @@ func tunnelTrust(servers *config.ServersConfig, target string, fingerprints []st
 		}
 		pinHostKeys(p, matched)
 	} else {
-		if !stdinIsTerminal() {
-			return clihint.Errorf(
-				"pass --fingerprint SHA256:... for non-interactive pinning",
-				"refusing to pin without confirmation")
-		}
 		if pinned, err := core.ParseHostKeys(p.SSH.HostKeys); err == nil && len(pinned) > 0 {
 			printHostKeyFingerprints(os.Stderr, "Currently pinned (old)", pinned)
 		}

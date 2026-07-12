@@ -188,7 +188,6 @@ func realHostKeyDial(addr string, algos []string) (HostKey, error) {
 			return errHostKeyCaptured
 		},
 		HostKeyAlgorithms: algos,
-		Timeout:           hostKeyDialTimeout,
 	}
 	conn, err := net.DialTimeout("tcp", addr, hostKeyDialTimeout)
 	if err != nil {

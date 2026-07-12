@@ -46,6 +46,32 @@ func TestTunnelTrustFingerprintMatchPinsSubset(t *testing.T) {
 	}
 }
 
+func TestTunnelTrustFingerprintDedupsRepeated(t *testing.T) {
+	cleanup := setupTestHome(t)
+	defer cleanup()
+	resetTrustFlags(t)
+	key := testCoreHostKey(t)
+	_ = stubTrustSeams(t, false, "", key)
+	servers := trustTestServers(nil)
+	if err := config.SaveServers(servers); err != nil {
+		t.Fatal(err)
+	}
+	fp, err := key.Fingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tunnelTrust(servers, "alpha", []string{fp, fp}); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := config.LoadServers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := loaded.Profiles[0].SSH.HostKeys; len(got) != 1 || got[0] != key.String() {
+		t.Fatalf("repeating the same fingerprint must pin exactly one key, got %v", got)
+	}
+}
+
 func TestTunnelTrustFingerprintMismatchPinsNothing(t *testing.T) {
 	cleanup := setupTestHome(t)
 	defer cleanup()

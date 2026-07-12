@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -167,6 +168,46 @@ func TestCaptureHostKeysStalledPeerTimesOut(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 3*time.Second {
 		t.Fatalf("capture did not respect the probe deadline: %v", elapsed)
+	}
+}
+
+func TestIsTransportErrorClassifiesEOFAndDNS(t *testing.T) {
+	if !isTransportError(io.EOF) {
+		t.Fatal("io.EOF must classify as a transport error")
+	}
+	if !isTransportError(&net.DNSError{}) {
+		t.Fatal("*net.DNSError must classify as a transport error")
+	}
+	if isTransportError(errors.New("negotiation failed")) {
+		t.Fatal("a non-transport sentinel error must not classify as a transport error")
+	}
+}
+
+// TestVerifyPinnedHostKeyChangedFallbackCaptureFails covers the branch where
+// the restricted dial presents a key that doesn't match the pin, and the
+// follow-up unrestricted CaptureHostKeys (used to populate the old-vs-new UX)
+// itself fails. ErrHostKeyChanged must still surface, falling back to the one
+// key the restricted dial did present rather than leaving Captured empty.
+func TestVerifyPinnedHostKeyChangedFallbackCaptureFails(t *testing.T) {
+	pinned, _ := testHostKey(t)
+	presented, _ := testHostKey(t) // different key from pinned by construction
+	var calls int
+	restore := SetHostKeyDialForTest(func(addr string, algos []string) (HostKey, error) {
+		calls++
+		if calls == 1 {
+			return presented, nil // the restricted verification dial
+		}
+		return HostKey{}, errors.New("capture boom") // the unrestricted re-capture, every family
+	})
+	defer restore()
+
+	err := verifyPinnedHostKey("host.example", 22, []HostKey{pinned})
+	var changed *ErrHostKeyChanged
+	if !errors.As(err, &changed) {
+		t.Fatalf("want ErrHostKeyChanged, got %v", err)
+	}
+	if len(changed.Captured) != 1 || changed.Captured[0] != presented {
+		t.Fatalf("fallback capture must carry the presented key, got %v", changed.Captured)
 	}
 }
 
