@@ -43,6 +43,9 @@ func TestConfigList_StripsControlFromStoredName(t *testing.T) {
 	if strings.ContainsRune(out, 0x1b) {
 		t.Fatalf("ESC reached terminal output: %q", out)
 	}
+	if !strings.Contains(out, "e[31mvil") {
+		t.Fatalf("sanitized name did not reach terminal output: %q", out)
+	}
 }
 
 func TestConfigSwitch_StripsControlFromStoredName(t *testing.T) {
@@ -63,5 +66,8 @@ func TestConfigSwitch_StripsControlFromStoredName(t *testing.T) {
 	})
 	if strings.ContainsRune(out, 0x1b) {
 		t.Fatalf("ESC reached terminal output: %q", out)
+	}
+	if !strings.Contains(out, "e[31mvil") {
+		t.Fatalf("sanitized name did not reach terminal output: %q", out)
 	}
 }

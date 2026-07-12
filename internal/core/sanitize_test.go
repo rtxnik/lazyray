@@ -15,6 +15,7 @@ func TestStripControl(t *testing.T) {
 		"привет🚀":               "привет🚀", // multi-byte UTF-8 preserved
 		"\u0085next":            "next",    // C1 NEL dropped
 		"del\x7fx":              "delx",    // DEL dropped
+		"\x1b\x1b":              "",        // all-control input reduces to empty
 		"":                      "",
 	}
 	for in, want := range cases {
@@ -32,7 +33,8 @@ func TestStripControl(t *testing.T) {
 func TestValidateDNSServer(t *testing.T) {
 	ok := []string{"8.8.8.8", "8.8.8.8:53", "[2001:db8::1]:53",
 		"https://dns.google/dns-query", "tcp://1.1.1.1:53", "https+local://1.1.1.1/dns-query"}
-	bad := []string{"", "dns.google", "http://evil/dns-query", "file:///etc/passwd", "javascript:alert(1)"}
+	bad := []string{"", "dns.google", "http://evil/dns-query", "file:///etc/passwd", "javascript:alert(1)",
+		"8.8.8.8:99999", "8.8.8.8:0", "8.8.8.8:bad"}
 	for _, s := range ok {
 		if err := ValidateDNSServer(s); err != nil {
 			t.Errorf("ValidateDNSServer(%q) = %v, want nil", s, err)
@@ -50,12 +52,20 @@ func TestSanitizeProfileDisplay_StripsNameNetworkAndChain(t *testing.T) {
 		Name:   "a\x1bb",
 		Server: config.ServerConfig{Address: "h\x1bost", Transport: config.TransportConfig{Network: "w\x1bs"}},
 		Chain:  []config.ServerConfig{{Address: "c\x1bhain", Transport: config.TransportConfig{Network: "t\x1bcp"}}},
+		SSH:    config.SSHConfig{Host: "h\x1bost.example", User: "u\x1bser"},
 	}
 	SanitizeProfileDisplay(p)
 	if strings.ContainsRune(p.Name, 0x1b) || strings.ContainsRune(p.Server.Address, 0x1b) ||
 		strings.ContainsRune(p.Server.Transport.Network, 0x1b) ||
-		strings.ContainsRune(p.Chain[0].Address, 0x1b) || strings.ContainsRune(p.Chain[0].Transport.Network, 0x1b) {
+		strings.ContainsRune(p.Chain[0].Address, 0x1b) || strings.ContainsRune(p.Chain[0].Transport.Network, 0x1b) ||
+		strings.ContainsRune(p.SSH.Host, 0x1b) || strings.ContainsRune(p.SSH.User, 0x1b) {
 		t.Errorf("control char survived: %+v", p)
+	}
+	if p.SSH.Host != "host.example" {
+		t.Errorf("SSH.Host = %q, want %q", p.SSH.Host, "host.example")
+	}
+	if p.SSH.User != "user" {
+		t.Errorf("SSH.User = %q, want %q", p.SSH.User, "user")
 	}
 }
 

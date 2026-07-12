@@ -711,12 +711,16 @@ func (a *App) handleRenameKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if idx < 0 || idx >= len(a.servers.Profiles) {
 			return a, nil
 		}
-		a.servers.Profiles[idx].Name = core.StripControl(newName)
+		sanitized := core.StripControl(newName)
+		if sanitized == "" {
+			return a, a.setWarning("profile name cannot be empty")
+		}
+		a.servers.Profiles[idx].Name = sanitized
 		if err := config.SaveServers(a.servers); err != nil {
 			return a, a.setError(fmt.Errorf("saving profile: %w", err))
 		}
 		a.profiles.SetProfiles(a.servers.Profiles)
-		return a, a.setMessage(fmt.Sprintf("renamed to %s", newName))
+		return a, a.setMessage(fmt.Sprintf("renamed to %s", sanitized))
 	case key.Matches(msg, a.keys.Escape):
 		a.profiles.CancelRename()
 		return a, nil
@@ -1085,7 +1089,7 @@ func (a *App) activateSelectedProfile() tea.Cmd {
 
 	// Not running — test connection, then switch + start
 	name := profile.Name
-	loadCmd := a.startLoading(fmt.Sprintf("testing %s...", name))
+	loadCmd := a.startLoading(fmt.Sprintf("testing %s...", core.StripControl(name)))
 	settings := a.settings
 	return tea.Batch(loadCmd, func() tea.Msg {
 		r := core.ProbeProfile(*profile, lifecycle.ProbeContextFor(name, settings))

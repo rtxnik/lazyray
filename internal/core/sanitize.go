@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/rtxnik/lazyray/internal/config"
@@ -43,8 +44,11 @@ func ValidateDNSServer(server string) error {
 	if net.ParseIP(server) != nil {
 		return nil
 	}
-	if host, _, err := net.SplitHostPort(server); err == nil && net.ParseIP(host) != nil {
-		return nil
+	if host, port, err := net.SplitHostPort(server); err == nil && net.ParseIP(host) != nil {
+		if n, perr := strconv.Atoi(port); perr == nil && n >= 1 && n <= 65535 {
+			return nil
+		}
+		return fmt.Errorf("DNS server %q has an invalid port", server)
 	}
 	for _, scheme := range dnsSchemes {
 		if strings.HasPrefix(server, scheme) {
@@ -73,6 +77,8 @@ func SanitizeProfileDisplay(p *config.Profile) {
 	p.Name = StripControl(p.Name)
 	p.Server.Address = StripControl(p.Server.Address)
 	p.Server.Transport.Network = StripControl(p.Server.Transport.Network)
+	p.SSH.Host = StripControl(p.SSH.Host)
+	p.SSH.User = StripControl(p.SSH.User)
 	for i := range p.Chain {
 		p.Chain[i].Address = StripControl(p.Chain[i].Address)
 		p.Chain[i].Transport.Network = StripControl(p.Chain[i].Transport.Network)

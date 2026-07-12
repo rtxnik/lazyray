@@ -99,6 +99,41 @@ func TestTunnelConnectUnknownHostNonTTYRefusesWithHint(t *testing.T) {
 	}
 }
 
+func TestTunnelConnectUnknownHostNonTTYStripsControlFromHostInMessage(t *testing.T) {
+	cleanup := setupTestHome(t)
+	defer cleanup()
+	_ = stubTrustSeams(t, false, "", testCoreHostKey(t))
+	servers := trustTestServers(nil)
+	servers.Profiles[0].SSH.Host = "203.0.113.7\x1b[31mHACKED\x1b[0m"
+	err := tunnelConnectByName(servers, "alpha")
+	if err == nil {
+		t.Fatal("non-TTY unknown host must refuse")
+	}
+	if strings.ContainsRune(err.Error(), 0x1b) {
+		t.Fatalf("control chars from SSH.Host reached the error message: %q", err.Error())
+	}
+}
+
+func TestTunnelConnectChangedKeyStripsControlFromHostInMessage(t *testing.T) {
+	cleanup := setupTestHome(t)
+	defer cleanup()
+	oldKey := testCoreHostKey(t)
+	newKey := testCoreHostKeySecond(t)
+	spawned := stubTrustSeams(t, true, "y\n", newKey)
+	servers := trustTestServers([]string{oldKey.String()})
+	servers.Profiles[0].SSH.Host = "203.0.113.7\x1b[31mHACKED\x1b[0m"
+	err := tunnelConnectByName(servers, "alpha")
+	if err == nil {
+		t.Fatal("changed key must refuse even on a TTY")
+	}
+	if strings.ContainsRune(err.Error(), 0x1b) {
+		t.Fatalf("control chars from SSH.Host reached the error message: %q", err.Error())
+	}
+	if len(*spawned) != 0 {
+		t.Fatal("changed key must never spawn ssh from the connect command")
+	}
+}
+
 func TestTunnelConnectUnknownHostTTYAcceptPinsAndConnects(t *testing.T) {
 	cleanup := setupTestHome(t)
 	defer cleanup()

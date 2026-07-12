@@ -368,6 +368,27 @@ func TestApp_HandleRenameKey_Esc(t *testing.T) {
 	}
 }
 
+// A rename whose input reduces to nothing (here: control characters, which
+// bubbles' textinput already strips at every insertion path) must never
+// persist an empty or unchanged-by-accident profile name.
+func TestApp_HandleRenameKey_ControlOnlyInputLeavesNameUnchanged(t *testing.T) {
+	app := newTestApp()
+	t.Setenv("HOME", t.TempDir())
+	origName := app.servers.Profiles[0].Name
+	app.profiles.StartRename()
+	app.profiles.RenameInput.SetValue("\x1b\x1b")
+
+	msg := tea.KeyMsg{Type: tea.KeyEnter}
+	model, _ := app.Update(msg)
+	a := model.(*App)
+	if a.servers.Profiles[0].Name != origName {
+		t.Errorf("Profiles[0].Name = %q, want unchanged %q", a.servers.Profiles[0].Name, origName)
+	}
+	if a.profiles.Renaming {
+		t.Error("rename mode should have exited")
+	}
+}
+
 // --- Window resize ---
 
 func TestApp_WindowResize(t *testing.T) {

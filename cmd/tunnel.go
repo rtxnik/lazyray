@@ -95,7 +95,7 @@ func tunnelTrust(servers *config.ServersConfig, target string, fingerprints []st
 	}
 	captured, err := core.CaptureHostKeys(p.SSH.Host, p.SSH.Port)
 	if err != nil {
-		return fmt.Errorf("cannot reach %s to capture its host key: %w", p.SSH.Host, err)
+		return fmt.Errorf("cannot reach %s to capture its host key: %w", core.StripControl(p.SSH.Host), err)
 	}
 
 	if len(fingerprints) > 0 {
@@ -192,7 +192,7 @@ func tunnelConnectByName(servers *config.ServersConfig, target string) error {
 		printHostKeyFingerprints(os.Stderr, "Live (new)", changed.Captured)
 		return clihint.Errorf(
 			"if the change is expected, re-pin with 'lzr tunnel trust "+core.StripControl(p.Name)+"'",
-			"refusing to connect: host key for %s changed (possible MITM)", changed.Host)
+			"refusing to connect: host key for %s changed (possible MITM)", core.StripControl(changed.Host))
 	}
 	if err != nil {
 		return err
@@ -218,10 +218,10 @@ func trustAndRetry(servers *config.ServersConfig, p *config.Profile, unknown *co
 	if !stdinIsTerminal() {
 		return clihint.Errorf(
 			"run 'lzr tunnel trust "+core.StripControl(p.Name)+"' interactively (or with --fingerprint) first",
-			"host %s is not trusted yet", unknown.Host)
+			"host %s is not trusted yet", core.StripControl(unknown.Host))
 	}
 	fmt.Fprintf(os.Stderr, "First connection to %s (%s).\n",
-		core.StripControl(p.Name), net.JoinHostPort(unknown.Host, strconv.Itoa(unknown.Port)))
+		core.StripControl(p.Name), net.JoinHostPort(core.StripControl(unknown.Host), strconv.Itoa(unknown.Port)))
 	printHostKeyFingerprints(os.Stderr, "Host key fingerprints", unknown.Captured)
 	fmt.Fprintln(os.Stderr, "Verify out-of-band on the server: ssh-keygen -lf /etc/ssh/ssh_host_*.pub")
 	fmt.Fprint(os.Stderr, "Trust this host? [y/N]: ")
