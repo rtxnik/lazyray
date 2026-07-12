@@ -1,6 +1,7 @@
 package modals
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -10,6 +11,14 @@ import (
 	"github.com/rtxnik/lazyray/internal/config"
 	"github.com/rtxnik/lazyray/internal/core"
 	"github.com/rtxnik/lazyray/internal/tui/theme"
+)
+
+type tunnelModalState int
+
+const (
+	tunnelStateList tunnelModalState = iota
+	tunnelStateTrustPrompt
+	tunnelStateKeyChanged
 )
 
 // TunnelModal manages SSH tunnel connections.
@@ -22,6 +31,11 @@ type TunnelModal struct {
 	err      string
 	width    int
 	height   int
+
+	state       tunnelModalState
+	pendingName string
+	pendingNew  []core.HostKey
+	pendingOld  []core.HostKey
 }
 
 // NewTunnelModal creates a new tunnel modal.
@@ -45,6 +59,15 @@ func (m *TunnelModal) Init() tea.Cmd { return nil }
 func (m *TunnelModal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		m.err = ""
+		if m.state != tunnelStateList {
+			switch msg.String() {
+			case "y", "enter":
+				m.confirmTrust()
+			case "n", "esc":
+				m.resetTrustState()
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case "esc":
 			m.Done = true
@@ -83,13 +106,83 @@ func (m *TunnelModal) toggleIndex(idx int) {
 		for i := range m.servers.Profiles {
 			if m.servers.Profiles[i].Name == s.Name {
 				if err := m.tunnels.Connect(&m.servers.Profiles[i]); err != nil {
-					m.err = err.Error()
+					var unknown *core.ErrHostKeyUnknown
+					var changed *core.ErrHostKeyChanged
+					switch {
+					case errors.As(err, &unknown):
+						m.state = tunnelStateTrustPrompt
+						m.pendingName = s.Name
+						m.pendingNew = unknown.Captured
+					case errors.As(err, &changed):
+						m.state = tunnelStateKeyChanged
+						m.pendingName = s.Name
+						m.pendingOld = changed.Pinned
+						m.pendingNew = changed.Captured
+					default:
+						m.err = err.Error()
+					}
 				}
 				break
 			}
 		}
 	}
 	m.refreshStatuses()
+}
+
+func (m *TunnelModal) resetTrustState() {
+	m.state = tunnelStateList
+	m.pendingName = ""
+	m.pendingNew = nil
+	m.pendingOld = nil
+}
+
+// confirmTrust pins the pending keys, persists, and retries the connect.
+// Explicit user confirmation is the only path here (y/enter in a trust state).
+func (m *TunnelModal) confirmTrust() {
+	if len(m.pendingNew) == 0 {
+		// A failed fallback capture leaves no live keys; confirming would
+		// overwrite the existing pin with an empty slice and silently revert
+		// the profile to first-use trust.
+		m.err = "no live host keys captured; nothing pinned"
+		m.resetTrustState()
+		return
+	}
+	p := m.findProfile(m.pendingName)
+	if p == nil {
+		m.err = "profile " + m.pendingName + " not found"
+		m.resetTrustState()
+		return
+	}
+	lines := make([]string, 0, len(m.pendingNew))
+	for _, k := range m.pendingNew {
+		lines = append(lines, k.String())
+	}
+	p.SSH.HostKeys = lines
+	if err := config.SaveServers(m.servers); err != nil {
+		m.err = "saving trusted host key: " + err.Error()
+		m.resetTrustState()
+		return
+	}
+	if err := m.tunnels.Connect(p); err != nil {
+		m.err = err.Error()
+	}
+	m.resetTrustState()
+	m.refreshStatuses()
+}
+
+func fingerprintLines(keys []core.HostKey) []string {
+	if len(keys) == 0 {
+		return []string{"(none)"}
+	}
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		fp, err := k.Fingerprint()
+		if err != nil {
+			fp = "(invalid)"
+		}
+		out = append(out, fmt.Sprintf("%s %s", k.Type, fp))
+	}
+	return out
 }
 
 func (m *TunnelModal) findProfile(name string) *config.Profile {
@@ -125,6 +218,42 @@ func (m *TunnelModal) View() string {
 	dim := lipgloss.NewStyle().Foreground(theme.Current().Muted)
 	sel := lipgloss.NewStyle().Foreground(theme.Current().Accent).Bold(true)
 	keyStyle := lipgloss.NewStyle().Foreground(theme.Current().Accent).Bold(true)
+
+	if m.state != tunnelStateList {
+		warnStyle := lipgloss.NewStyle().Foreground(theme.Current().Error).Bold(true)
+		var b strings.Builder
+		if m.state == tunnelStateTrustPrompt {
+			b.WriteString(titleStyle.Render("Trust SSH host?"))
+			b.WriteString("\n\n")
+			b.WriteString(fmt.Sprintf("First connection to %s.\n", sel.Render(m.pendingName)))
+			b.WriteString("Host key fingerprints:\n")
+			for _, l := range fingerprintLines(m.pendingNew) {
+				b.WriteString("  " + l + "\n")
+			}
+			b.WriteString(dim.Render("Verify on the server: ssh-keygen -lf /etc/ssh/ssh_host_*.pub"))
+			b.WriteString("\n\n")
+		} else {
+			b.WriteString(warnStyle.Render("HOST KEY CHANGED — possible MITM"))
+			b.WriteString("\n\n")
+			b.WriteString(fmt.Sprintf("Profile %s.\n", sel.Render(m.pendingName)))
+			b.WriteString("Pinned (old):\n")
+			for _, l := range fingerprintLines(m.pendingOld) {
+				b.WriteString("  " + l + "\n")
+			}
+			b.WriteString("Live (new):\n")
+			for _, l := range fingerprintLines(m.pendingNew) {
+				b.WriteString("  " + l + "\n")
+			}
+			b.WriteString(warnStyle.Render("Only continue if you expected this change."))
+			b.WriteString("\n\n")
+		}
+		if m.err != "" {
+			b.WriteString(lipgloss.NewStyle().Foreground(theme.Current().Error).Render(m.err))
+			b.WriteString("\n\n")
+		}
+		b.WriteString(dim.Render("[y/Enter] Trust  [n/Esc] Cancel"))
+		return modal.Render(b.String())
+	}
 
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("SSH Tunnels"))
