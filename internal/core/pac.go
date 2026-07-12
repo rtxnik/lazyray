@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -54,18 +55,27 @@ func GeneratePAC(settings *config.Settings, profile *config.Profile) string {
 `, conditionsStr, proxyString)
 }
 
+// jsStr encodes s as a JavaScript string literal (quoted and fully escaped) so an
+// untrusted routing entry cannot break out of the generated PAC JavaScript.
+// json.Marshal escapes quotes, backslashes, control characters, and (via the
+// default SetEscapeHTML) < > &, all of which are inert in the served PAC file.
+func jsStr(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}
+
 // pacConditionFromEntry converts a routing rule entry to a PAC condition.
 func pacConditionFromEntry(entry string) string {
 	switch {
 	case strings.HasPrefix(entry, "domain:"):
 		domain := strings.TrimPrefix(entry, "domain:")
-		return fmt.Sprintf(`if (dnsDomainIs(host, "%s") || dnsDomainIs(host, ".%s")) return "DIRECT";`, domain, domain)
+		return fmt.Sprintf(`if (dnsDomainIs(host, %s) || dnsDomainIs(host, %s)) return "DIRECT";`, jsStr(domain), jsStr("."+domain))
 	case strings.HasPrefix(entry, "full:"):
 		domain := strings.TrimPrefix(entry, "full:")
-		return fmt.Sprintf(`if (host === "%s") return "DIRECT";`, domain)
+		return fmt.Sprintf(`if (host === %s) return "DIRECT";`, jsStr(domain))
 	case strings.HasPrefix(entry, "keyword:"):
 		kw := strings.TrimPrefix(entry, "keyword:")
-		return fmt.Sprintf(`if (host.indexOf("%s") !== -1) return "DIRECT";`, kw)
+		return fmt.Sprintf(`if (host.indexOf(%s) !== -1) return "DIRECT";`, jsStr(kw))
 	case strings.HasPrefix(entry, "geoip:private"):
 		return "" // Already covered by default bypasses
 	case strings.HasPrefix(entry, "geosite:"):
@@ -79,10 +89,10 @@ func pacConditionFromEntry(entry string) string {
 		if strings.Contains(entry, ".") && !strings.Contains(entry, "/") {
 			if entry[0] >= '0' && entry[0] <= '9' {
 				// IP address
-				return fmt.Sprintf(`if (isInNet(host, "%s", "255.255.255.255")) return "DIRECT";`, entry)
+				return fmt.Sprintf(`if (isInNet(host, %s, "255.255.255.255")) return "DIRECT";`, jsStr(entry))
 			}
 			// Domain name
-			return fmt.Sprintf(`if (dnsDomainIs(host, "%s") || dnsDomainIs(host, ".%s")) return "DIRECT";`, entry, entry)
+			return fmt.Sprintf(`if (dnsDomainIs(host, %s) || dnsDomainIs(host, %s)) return "DIRECT";`, jsStr(entry), jsStr("."+entry))
 		}
 		return ""
 	}

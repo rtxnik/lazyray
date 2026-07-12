@@ -62,6 +62,29 @@ func TestGeneratePAC_CustomPorts(t *testing.T) {
 	}
 }
 
+func TestGeneratePAC_EscapesBypassInjection(t *testing.T) {
+	profile := &config.Profile{
+		Routing: config.ProfileRouting{Bypass: []string{`full:a"; INJECTED_MARKER; b="`}},
+	}
+	out := GeneratePAC(&config.Settings{}, profile)
+	// The raw breakout (unescaped quote + bare JS) must NOT appear.
+	if strings.Contains(out, `"; INJECTED_MARKER; b="`) {
+		t.Fatalf("PAC injection not neutralised:\n%s", out)
+	}
+	// The value still appears, but only inside an escaped string literal.
+	if !strings.Contains(out, `INJECTED_MARKER`) || !strings.Contains(out, `\"`) {
+		t.Fatalf("expected value present but escaped:\n%s", out)
+	}
+}
+
+func TestGeneratePAC_EscapesAngleBrackets(t *testing.T) {
+	profile := &config.Profile{Routing: config.ProfileRouting{Bypass: []string{`keyword:<script>`}}}
+	out := GeneratePAC(&config.Settings{}, profile)
+	if strings.Contains(out, "<script>") {
+		t.Fatalf("angle brackets not escaped:\n%s", out)
+	}
+}
+
 func TestPacConditionFromEntry(t *testing.T) {
 	tests := []struct {
 		entry    string
