@@ -25,7 +25,7 @@ func encExport(t *testing.T, p config.Profile) string {
 }
 
 func TestImportSingleProfile_RejectsBadPortAndDoesNotPersist(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	isolateConfig(t)
 	err := importSingleProfile(&cobra.Command{}, "vless://11111111-1111-1111-1111-111111111111@h.example:70000?type=tcp#p")
 	if err == nil {
 		t.Fatal("expected error for port 70000")
@@ -37,7 +37,7 @@ func TestImportSingleProfile_RejectsBadPortAndDoesNotPersist(t *testing.T) {
 }
 
 func TestImportSingleProfile_RejectsZeroPort(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	isolateConfig(t)
 	err := importSingleProfile(&cobra.Command{}, "vless://11111111-1111-1111-1111-111111111111@h.example:0?type=tcp#p")
 	if err == nil {
 		t.Fatal("expected error for port 0")
@@ -49,7 +49,7 @@ func TestImportSingleProfile_RejectsZeroPort(t *testing.T) {
 }
 
 func TestImportEncrypted_SkipsBadTopLevelPort(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	isolateConfig(t)
 	p := validImportBase()
 	p.Server.Port = 70000
 	importDecrypt = "pw"
@@ -65,7 +65,7 @@ func TestImportEncrypted_SkipsBadTopLevelPort(t *testing.T) {
 }
 
 func TestImportEncrypted_SkipsBadChainPort(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	isolateConfig(t)
 	p := validImportBase()
 	p.Chain = []config.ServerConfig{{Address: "c.example", Port: 70000, Transport: config.TransportConfig{Network: "tcp"}}}
 	importDecrypt = "pw"

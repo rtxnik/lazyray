@@ -29,7 +29,7 @@ func routingProfile() config.Profile {
 }
 
 func TestImportEncrypted_DropsRoutingByDefault(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	isolateConfig(t)
 	importDecrypt = "pw"
 	importAllowRouting = false
 	t.Cleanup(func() { importDecrypt = ""; importAllowRouting = false })
@@ -47,7 +47,7 @@ func TestImportEncrypted_DropsRoutingByDefault(t *testing.T) {
 }
 
 func TestImportEncrypted_AllowRoutingRejectsBadDNS(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	isolateConfig(t)
 	p := routingProfile()
 	p.Routing.DNSRules = []config.DNSRule{{Server: "file:///etc/passwd"}}
 	importDecrypt = "pw"

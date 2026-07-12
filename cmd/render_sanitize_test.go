@@ -3,11 +3,24 @@ package cmd
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/rtxnik/lazyray/internal/config"
 )
+
+// isolateConfig points the config/data directories at a throwaway temp dir on
+// every platform: HOME drives ConfigDir/DataDir on unix, while APPDATA and
+// LOCALAPPDATA drive them on windows. Setting all three keeps these tests from
+// touching the real user config regardless of GOOS.
+func isolateConfig(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("APPDATA", filepath.Join(dir, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(dir, "AppData", "Local"))
+}
 
 // captureStdout runs f with os.Stdout redirected to a pipe and returns what was written.
 func captureStdout(t *testing.T, f func()) string {
@@ -26,7 +39,7 @@ func captureStdout(t *testing.T, f func()) string {
 }
 
 func TestConfigList_StripsControlFromStoredName(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	isolateConfig(t)
 	servers := &config.ServersConfig{Profiles: []config.Profile{{
 		Name:    "e\x1b[31mvil",
 		Default: true,
@@ -49,7 +62,7 @@ func TestConfigList_StripsControlFromStoredName(t *testing.T) {
 }
 
 func TestConfigSwitch_StripsControlFromStoredName(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	isolateConfig(t)
 	name := "e\x1b[31mvil"
 	servers := &config.ServersConfig{Profiles: []config.Profile{{
 		Name:    name,
