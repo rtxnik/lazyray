@@ -12,10 +12,11 @@ import (
 )
 
 var (
-	importName    string
-	importForce   bool
-	importSub     string
-	importDecrypt string
+	importName         string
+	importForce        bool
+	importSub          string
+	importDecrypt      string
+	importAllowRouting bool
 )
 
 var importCmd = &cobra.Command{
@@ -150,6 +151,26 @@ func importEncrypted(cmd *cobra.Command, data string) error {
 
 	added := 0
 	for _, p := range profiles {
+		if core.HasRoutingOverrides(&p) {
+			if !importAllowRouting {
+				fmt.Fprintf(cmd.ErrOrStderr(),
+					"Warning: %q carries routing/DNS overrides (%d bypass, %d block, %d dns rules); dropping them. Re-import with --allow-routing to keep them.\n",
+					p.Name, len(p.Routing.Bypass), len(p.Routing.Block), len(p.Routing.DNSRules))
+				p.Routing = config.ProfileRouting{}
+			} else {
+				bad := false
+				for _, rule := range p.Routing.DNSRules {
+					if err := core.ValidateDNSServer(rule.Server); err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "Skipping %q: %v\n", p.Name, err)
+						bad = true
+						break
+					}
+				}
+				if bad {
+					continue
+				}
+			}
+		}
 		if _, exists := servers.HasUUID(p.Server.UUID); exists && !importForce {
 			fmt.Fprintf(cmd.ErrOrStderr(), "Skipping %q (UUID exists, use --force)\n", core.StripControl(p.Name))
 			continue
@@ -174,5 +195,6 @@ func init() {
 	importCmd.Flags().BoolVarP(&importForce, "force", "f", false, "Import even if UUID already exists")
 	importCmd.Flags().StringVar(&importSub, "sub", "", "Import from subscription URL")
 	importCmd.Flags().StringVar(&importDecrypt, "decrypt", "", "Decrypt encrypted export with password")
+	importCmd.Flags().BoolVar(&importAllowRouting, "allow-routing", false, "Honor routing/DNS overrides carried by an encrypted import (validated against an allowlist)")
 	rootCmd.AddCommand(importCmd)
 }
