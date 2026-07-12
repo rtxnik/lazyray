@@ -10,10 +10,13 @@ package core
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -153,4 +156,153 @@ func hostKeyAlgorithmsFor(keys []HostKey) []string {
 		add(k.Type)
 	}
 	return algos
+}
+
+// errHostKeyCaptured aborts the probe handshake once the host key has been
+// recorded; no authentication is ever attempted.
+var errHostKeyCaptured = errors.New("host key captured")
+
+var hostKeyDialTimeout = 10 * time.Second
+
+// hostKeyDial is the capture/pre-flight dial seam. It connects to addr,
+// records the host key the server presents (negotiation restricted to algos
+// when non-nil), and aborts before authentication.
+var hostKeyDial = realHostKeyDial
+
+// SetHostKeyDialForTest swaps the capture dial and returns a restore func.
+func SetHostKeyDialForTest(fn func(addr string, algos []string) (HostKey, error)) (restore func()) {
+	prev := hostKeyDial
+	hostKeyDial = fn
+	return func() { hostKeyDial = prev }
+}
+
+func realHostKeyDial(addr string, algos []string) (HostKey, error) {
+	var captured HostKey
+	cfg := &ssh.ClientConfig{
+		User: "lazyray-hostkey-probe",
+		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+			captured = HostKey{
+				Type:   key.Type(),
+				Base64: base64.StdEncoding.EncodeToString(key.Marshal()),
+			}
+			return errHostKeyCaptured
+		},
+		HostKeyAlgorithms: algos,
+		Timeout:           hostKeyDialTimeout,
+	}
+	conn, err := net.DialTimeout("tcp", addr, hostKeyDialTimeout)
+	if err != nil {
+		return HostKey{}, err
+	}
+	defer conn.Close()
+	// ClientConfig.Timeout bounds only the TCP dial; the SSH handshake has no
+	// deadline of its own, so a stalled peer would hang the pre-flight check
+	// forever. Bound the whole probe with a connection deadline instead.
+	_ = conn.SetDeadline(time.Now().Add(hostKeyDialTimeout))
+	c, chans, reqs, err := ssh.NewClientConn(conn, addr, cfg)
+	if err == nil {
+		// Not reachable in practice: the callback always aborts the handshake.
+		go ssh.DiscardRequests(reqs)
+		go func() {
+			for ch := range chans {
+				_ = ch.Reject(ssh.Prohibited, "probe only")
+			}
+		}()
+		_ = c.Close()
+	}
+	if captured.Type != "" {
+		return captured, nil
+	}
+	if err == nil {
+		err = errors.New("server presented no host key")
+	}
+	return HostKey{}, err
+}
+
+// captureFamilies: one probe per key-algorithm family so multi-algorithm
+// servers are pinned in full (robust against a server later dropping one
+// algorithm).
+var captureFamilies = [][]string{
+	{"ssh-ed25519"},
+	{"ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521"},
+	{"rsa-sha2-512", "rsa-sha2-256", "ssh-rsa"},
+}
+
+// CaptureHostKeys probes host:port once per key-algorithm family and returns
+// the deduplicated set of presented keys. It fails only when no family
+// yields a key (host unreachable / not an SSH server).
+func CaptureHostKeys(host string, port int) ([]HostKey, error) {
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
+	var keys []HostKey
+	seen := make(map[string]bool)
+	var lastErr error
+	for _, family := range captureFamilies {
+		k, err := hostKeyDial(addr, family)
+		if err != nil {
+			lastErr = err
+			if isTransportError(err) {
+				break // dead host: don't burn two more dial timeouts
+			}
+			continue
+		}
+		if !seen[k.String()] {
+			seen[k.String()] = true
+			keys = append(keys, k)
+		}
+	}
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("capturing host key from %s: %w", addr, lastErr)
+	}
+	return keys, nil
+}
+
+// isTransportError reports whether err is a network-level failure (dial
+// refused, DNS failure, timeout, immediate connection drop) as opposed to an
+// SSH protocol/negotiation failure. Misclassifying a transport failure as
+// negotiation would surface a false "host key changed" MITM warning for a
+// merely dead or flaky server, so this errs on the transport side: io.EOF
+// (x/crypto/ssh returns it bare when the peer closes during handshake) and
+// DNS errors are transport too.
+func isTransportError(err error) bool {
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return true
+	}
+	var nErr net.Error
+	return errors.As(err, &nErr) && nErr.Timeout()
+}
+
+// verifyPinnedHostKey dials the host restricted to the pinned algorithms and
+// confirms the presented key is one of the pins.
+//   - match                       → nil (proceed to spawn ssh)
+//   - different key / negotiation → *ErrHostKeyChanged carrying the live key
+//     set (one unrestricted capture, so the old-vs-new UX always has data —
+//     a server rotated to an unpinned algorithm would otherwise be blank)
+//   - unreachable                 → plain error, fail closed
+func verifyPinnedHostKey(host string, port int, pinned []HostKey) error {
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
+	presented, dialErr := hostKeyDial(addr, hostKeyAlgorithmsFor(pinned))
+	if dialErr == nil {
+		for _, p := range pinned {
+			if p == presented {
+				return nil
+			}
+		}
+	} else if isTransportError(dialErr) {
+		return fmt.Errorf("cannot reach %s to verify its identity: %w", addr, dialErr)
+	}
+	changed := &ErrHostKeyChanged{Host: host, Port: port, Pinned: pinned}
+	if captured, err := CaptureHostKeys(host, port); err == nil {
+		changed.Captured = captured
+	} else if dialErr == nil {
+		changed.Captured = []HostKey{presented}
+	}
+	return changed
 }
