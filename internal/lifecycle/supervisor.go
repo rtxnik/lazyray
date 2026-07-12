@@ -3,6 +3,7 @@ package lifecycle
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -11,6 +12,25 @@ import (
 	"github.com/rtxnik/lazyray/internal/config"
 	"github.com/rtxnik/lazyray/internal/core"
 	"github.com/rtxnik/lazyray/internal/platform"
+)
+
+// Supervise-loop tuning (package vars so tests can override them deterministically).
+var (
+	// healthyRunThreshold: an xray incarnation that survives this long is treated
+	// as healthy, so a later crash starts a fresh restart budget instead of
+	// counting toward the crash-loop limit.
+	healthyRunThreshold = 30 * time.Second
+	// restartBackoff paces respawns after a rapid (sub-threshold) crash so a
+	// broken config cannot busy-loop. Not applied after a healthy run.
+	restartBackoff = 2 * time.Second
+	// timeNow is the clock seam (overridden in tests for deterministic uptime).
+	timeNow = time.Now
+	// writeState persists the restarted-pid update. It is a seam (var, not a
+	// direct WriteState call) so a test can force a persistence failure and assert
+	// the in-memory State remains the load-bearing source of truth. Only the
+	// restart tail routes through it; the initial Run write stays a direct
+	// WriteState (its failure is already a fatal StagedError{state}).
+	writeState = WriteState
 )
 
 // Supervisor owns one xray session: process, routing, watchdog, and teardown.
@@ -25,7 +45,7 @@ type Supervisor struct {
 	// Seams (default to real implementations in Run when nil).
 	sysproxy      platform.SystemProxy
 	startXray     func() (pid int, err error)
-	superviseXray func(ctx context.Context, pid int) error
+	superviseXray func(ctx context.Context, st *State) error
 	killXray      func(pid int) error
 }
 
@@ -96,7 +116,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	sigCtx, stop := signal.NotifyContext(ctx, terminateSignals()...)
 	defer stop()
 
-	_ = s.superviseXray(sigCtx, pid)
+	_ = s.superviseXray(sigCtx, st)
 
 	// Teardown: revert routing → kill xray group → remove state.
 	return Teardown(st, s.sysproxy, s.killXray)
@@ -118,12 +138,15 @@ func (s *Supervisor) startXrayReal() (int, error) {
 }
 
 // superviseXrayReal waits on xray; if it exits unexpectedly and auto-restart is
-// enabled, it respawns up to maxRetries. On ctx cancellation it terminates the
-// child itself (it owns s.cmd), using the Wait completion as the death oracle so
-// the kill and the reaper never operate on the same pid from two goroutines.
-func (s *Supervisor) superviseXrayReal(ctx context.Context, pid int) error {
+// enabled, it respawns, keeping st.XrayPID (the pid Teardown and Reconcile use)
+// in sync. Only rapid (sub-threshold) crashes count toward maxRetries and are
+// paced by restartBackoff; a run that survives healthyRunThreshold resets the
+// streak and restarts for free. On ctx cancellation it terminates the child
+// itself (it owns s.cmd), using Wait completion as the death oracle.
+func (s *Supervisor) superviseXrayReal(ctx context.Context, st *State) error {
 	const maxRetries = 3
 	retries := 0
+	startedAt := timeNow()
 	for {
 		cmd := s.cmd
 		exited := make(chan struct{})
@@ -136,16 +159,32 @@ func (s *Supervisor) superviseXrayReal(ctx context.Context, pid int) error {
 
 		select {
 		case <-ctx.Done():
-			s.terminateChild(pid, exited)
+			s.terminateChild(st.XrayPID, exited)
 			return nil
 		case <-exited:
+			if ctx.Err() != nil {
+				return nil // shutdown won the ctx.Done/exited race — never respawn
+			}
+			uptime := timeNow().Sub(startedAt) // read the clock once per exit
+			if uptime >= healthyRunThreshold {
+				retries = 0 // healthy run that crashed → fresh restart budget
+			}
 			if !s.Settings.Xray.AutoRestart || retries >= maxRetries {
 				if s.Settings.Notifications.Enabled {
 					_ = platform.Current().Notify("lazyray", "xray exited and was not restarted")
 				}
 				return nil
 			}
-			retries++
+			if uptime < healthyRunThreshold { // rapid crash → pace respawn and count it
+				timer := time.NewTimer(restartBackoff)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return nil // no live child between exit and respawn
+				case <-timer.C:
+				}
+				retries++ // only rapid crashes accumulate; a healthy restart is free
+			}
 			newPID, err := s.startXray()
 			if err != nil {
 				if s.Settings.Notifications.Enabled {
@@ -153,11 +192,21 @@ func (s *Supervisor) superviseXrayReal(ctx context.Context, pid int) error {
 				}
 				return nil
 			}
-			if st, _ := ReadState(); st != nil {
-				st.XrayPID = newPID
-				_ = WriteState(st)
+			st.XrayPID = newPID // in-memory: Teardown (Run:102) sees the current pid
+			if werr := writeState(st); werr != nil {
+				// In-memory st already holds newPID, so graceful Teardown stays
+				// correct and Reconcile's guardedKill (IsOurXray) cannot wrong-kill a
+				// stale on-disk pid. Surface the divergence instead of swallowing it,
+				// but keep supervising — a transient persistence failure must not drop
+				// a working proxy. Residual (WriteState fail + hard supervisor death +
+				// a later Reconcile) is at worst an orphaned xray, never a wrong-kill.
+				if lf := openSupervisorLog(); lf != nil {
+					_, _ = fmt.Fprintf(lf, "%s supervisor: state persistence failed after xray restart (pid %d); on-disk record is stale: %v\n",
+						timeNow().UTC().Format(time.RFC3339), newPID, werr)
+					_ = lf.Close()
+				}
 			}
-			pid = newPID
+			startedAt = timeNow()
 		}
 	}
 }
