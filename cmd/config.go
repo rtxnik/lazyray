@@ -120,7 +120,7 @@ var configSwitchCmd = &cobra.Command{
 			return fmt.Errorf("saving servers: %w", err)
 		}
 
-		fmt.Printf("Switched to profile: %s\n", servers.Profiles[found].Name)
+		fmt.Printf("Switched to profile: %s\n", core.StripControl(servers.Profiles[found].Name))
 		return nil
 	},
 }

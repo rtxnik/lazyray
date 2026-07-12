@@ -92,7 +92,7 @@ diagnostics use 'lzr doctor'.`,
 
 		// Chain hops are bare servers, never the active profile → reachability only.
 		for i, srv := range profile.Chain {
-			fmt.Printf("Testing chain hop %d (%s:%d)...\n", i+1, srv.Address, srv.Port)
+			fmt.Printf("Testing chain hop %d (%s:%d)...\n", i+1, core.StripControl(srv.Address), srv.Port)
 			cr := core.ProbeProfile(config.Profile{Server: srv}, core.ProbeContext{Timeout: 3 * time.Second})
 			switch cr.Status {
 			case core.LivenessOK:
@@ -162,15 +162,15 @@ func testAllProfiles(servers *config.ServersConfig) error {
 		switch r.Status {
 		case core.LivenessOK:
 			fmt.Printf("OK %dms\n", r.Latency.Milliseconds())
-			results = append(results, profileLatency{name: p.Name, latency: r.Latency})
+			results = append(results, profileLatency{name: core.StripControl(p.Name), latency: r.Latency})
 			p.Latency = r.Latency.Milliseconds()
 		case core.LivenessSkipped:
 			fmt.Printf("n/a (%s)\n", r.Reason)
-			results = append(results, profileLatency{name: p.Name, skipped: true})
+			results = append(results, profileLatency{name: core.StripControl(p.Name), skipped: true})
 			p.Latency = latencySkipped
 		default:
 			fmt.Printf("FAIL: %v\n", r.Err)
-			results = append(results, profileLatency{name: p.Name, err: r.Err})
+			results = append(results, profileLatency{name: core.StripControl(p.Name), err: r.Err})
 			p.Latency = -1
 		}
 	}

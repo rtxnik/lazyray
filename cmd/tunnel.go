@@ -83,7 +83,7 @@ func tunnelTrust(servers *config.ServersConfig, target string, fingerprints []st
 		return errProfileNotFound(target)
 	}
 	if p.SSH.Host == "" {
-		return fmt.Errorf("no SSH configuration for profile %s", p.Name)
+		return fmt.Errorf("no SSH configuration for profile %s", core.StripControl(p.Name))
 	}
 	if err := core.ValidateSSHTarget(p.SSH.User, p.SSH.Host); err != nil {
 		return err
@@ -191,7 +191,7 @@ func tunnelConnectByName(servers *config.ServersConfig, target string) error {
 		printHostKeyFingerprints(os.Stderr, "Pinned (old)", changed.Pinned)
 		printHostKeyFingerprints(os.Stderr, "Live (new)", changed.Captured)
 		return clihint.Errorf(
-			"if the change is expected, re-pin with 'lzr tunnel trust "+p.Name+"'",
+			"if the change is expected, re-pin with 'lzr tunnel trust "+core.StripControl(p.Name)+"'",
 			"refusing to connect: host key for %s changed (possible MITM)", changed.Host)
 	}
 	if err != nil {
@@ -201,7 +201,7 @@ func tunnelConnectByName(servers *config.ServersConfig, target string) error {
 	statuses := tunnelManager.Status(servers.Profiles)
 	for _, s := range statuses {
 		if s.Name == p.Name && s.Connected {
-			fmt.Printf("Connected to %s (PID %d)\n", s.Name, s.PID)
+			fmt.Printf("Connected to %s (PID %d)\n", core.StripControl(s.Name), s.PID)
 			fmt.Printf("  Panel: %s\n", s.PanelURL)
 			fmt.Println("  Tunnel will persist after this command exits")
 			fmt.Println("  Close with: lzr tunnel close")
@@ -221,7 +221,7 @@ func trustAndRetry(servers *config.ServersConfig, p *config.Profile, unknown *co
 			"host %s is not trusted yet", unknown.Host)
 	}
 	fmt.Fprintf(os.Stderr, "First connection to %s (%s).\n",
-		p.Name, net.JoinHostPort(unknown.Host, strconv.Itoa(unknown.Port)))
+		core.StripControl(p.Name), net.JoinHostPort(unknown.Host, strconv.Itoa(unknown.Port)))
 	printHostKeyFingerprints(os.Stderr, "Host key fingerprints", unknown.Captured)
 	fmt.Fprintln(os.Stderr, "Verify out-of-band on the server: ssh-keygen -lf /etc/ssh/ssh_host_*.pub")
 	fmt.Fprint(os.Stderr, "Trust this host? [y/N]: ")
@@ -283,7 +283,7 @@ func tunnelStatus() error {
 		if s.Connected {
 			state = fmt.Sprintf("connected (PID %d) → %s", s.PID, s.PanelURL)
 		}
-		fmt.Printf("  %s: %s\n", s.Name, state)
+		fmt.Printf("  %s: %s\n", core.StripControl(s.Name), state)
 	}
 	return nil
 }

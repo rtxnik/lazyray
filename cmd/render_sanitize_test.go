@@ -44,3 +44,24 @@ func TestConfigList_StripsControlFromStoredName(t *testing.T) {
 		t.Fatalf("ESC reached terminal output: %q", out)
 	}
 }
+
+func TestConfigSwitch_StripsControlFromStoredName(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	name := "e\x1b[31mvil"
+	servers := &config.ServersConfig{Profiles: []config.Profile{{
+		Name:    name,
+		Default: false,
+		Server:  config.ServerConfig{Address: "h.example", Port: 443, UUID: "11111111-1111-1111-1111-111111111111", Transport: config.TransportConfig{Network: "tcp"}},
+	}}}
+	if err := config.SaveServers(servers); err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() {
+		if err := configSwitchCmd.RunE(configSwitchCmd, []string{name}); err != nil {
+			t.Fatalf("config switch: %v", err)
+		}
+	})
+	if strings.ContainsRune(out, 0x1b) {
+		t.Fatalf("ESC reached terminal output: %q", out)
+	}
+}
