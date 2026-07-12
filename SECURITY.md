@@ -131,10 +131,11 @@ whatever the latest published release is.
 - The background service is **user-scoped and never runs as root**.
 - Profiles can be exported encrypted with AES-256-GCM (key derived via PBKDF2).
 
-**Known limitation to disclose:** SSH tunnels currently run with
-`StrictHostKeyChecking=no`, which leaves them exposed to host-key
-man-in-the-middle attacks. Config directories are `0755` (world-readable
-metadata, though the credential files within are `0600`).
+Config directories are `0755` (world-readable metadata, though the
+credential files within are `0600`). SSH tunnels verify host keys against a
+per-profile `known_hosts` file with `StrictHostKeyChecking=yes`; an unknown
+key requires explicit first-connect confirmation, and a changed key is refused
+until explicitly re-trusted.
 
 ## Scope
 
