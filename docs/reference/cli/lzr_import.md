@@ -22,6 +22,7 @@ lzr import [url] [flags]
 ### Options
 
 ```
+      --allow-routing    Honor routing/DNS overrides carried by an encrypted import (validated against an allowlist)
       --decrypt string   Decrypt encrypted export with password
   -f, --force            Import even if UUID already exists
   -h, --help             help for import
