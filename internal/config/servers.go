@@ -59,11 +59,17 @@ func (s *ServerConfig) GetProtocol() string {
 
 // SSHConfig holds SSH tunnel settings for a server.
 type SSHConfig struct {
-	Host    string      `yaml:"host"`
-	Port    int         `yaml:"port"`
-	User    string      `yaml:"user"`
-	KeyPath string      `yaml:"keyPath"`
-	Panel   PanelConfig `yaml:"panel"`
+	Host    string `yaml:"host"`
+	Port    int    `yaml:"port"`
+	User    string `yaml:"user"`
+	KeyPath string `yaml:"keyPath"`
+	// HostKeys pins the server's SSH host public keys, one "<type> <base64>"
+	// entry per algorithm. Empty means the host is not trusted yet (TOFU flow).
+	// The key material carries no host prefix: the host/port live in
+	// Host/Port above, and the known_hosts host token is generated at
+	// connect time so the two can never drift.
+	HostKeys []string    `yaml:"hostKeys,omitempty"`
+	Panel    PanelConfig `yaml:"panel"`
 }
 
 // PanelConfig holds panel access settings.
@@ -109,6 +115,7 @@ func (p Profile) Clone() Profile {
 	clone := p
 	clone.Chain = cloneSlice(p.Chain)
 	clone.Tags = cloneSlice(p.Tags)
+	clone.SSH.HostKeys = cloneSlice(p.SSH.HostKeys)
 	clone.Routing.Bypass = cloneSlice(p.Routing.Bypass)
 	clone.Routing.Block = cloneSlice(p.Routing.Block)
 	if p.Routing.DNSRules != nil {

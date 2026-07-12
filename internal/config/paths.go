@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -84,16 +86,32 @@ func PIDFilePath() string {
 	return filepath.Join(DataDir(), "xray.pid")
 }
 
-// TunnelPIDPath returns the path to a tunnel PID file for a given profile name.
-// The name is sanitized to produce a safe filename.
-func TunnelPIDPath(name string) string {
-	safe := strings.Map(func(r rune) rune {
+// sanitizeProfileName maps a profile name onto a safe filename fragment.
+// Lossy: distinct names can collide ("prod/eu" and "prod_eu" both become
+// "prod_eu"), which is acceptable for PID files only.
+func sanitizeProfileName(name string) string {
+	return strings.Map(func(r rune) rune {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
 			return r
 		}
 		return '_'
 	}, name)
-	return filepath.Join(DataDir(), "tunnel-"+safe+".pid")
+}
+
+// TunnelPIDPath returns the path to a tunnel PID file for a given profile name.
+// The name is sanitized to produce a safe filename.
+func TunnelPIDPath(name string) string {
+	return filepath.Join(DataDir(), "tunnel-"+sanitizeProfileName(name)+".pid")
+}
+
+// TunnelKnownHostsPath returns the path to the derived per-profile known_hosts
+// file. Unlike PID files, this is a trust boundary, so the sanitized name is
+// suffixed with a short hash of the exact profile name: distinct profiles must
+// never share host-key trust even when their sanitized names collide.
+func TunnelKnownHostsPath(name string) string {
+	sum := sha256.Sum256([]byte(name))
+	return filepath.Join(DataDir(),
+		"tunnel-"+sanitizeProfileName(name)+"-"+hex.EncodeToString(sum[:4])+".known_hosts")
 }
 
 // TunnelPIDGlob returns the glob pattern matching all tunnel PID files.
