@@ -58,6 +58,106 @@ var tunnelCloseCmd = &cobra.Command{
 	},
 }
 
+var tunnelTrustFingerprints []string
+
+var tunnelTrustCmd = &cobra.Command{
+	Use:   "trust <name>",
+	Short: "Pin or re-pin a profile's SSH host key",
+	Long: `Capture the SSH host key of a profile's server, show its SHA256 fingerprint, and pin it into the profile after explicit confirmation.
+
+Verify the fingerprint out-of-band before confirming (on the server: ssh-keygen -lf /etc/ssh/ssh_host_*.pub). With --fingerprint the command is non-interactive: only captured keys whose fingerprints match the provided values are pinned, and a value that matches nothing is an error. Re-running the command replaces a previous pin (shown as "old") after the same confirmation. Pinning via a dedicated known_hosts disables OpenSSH's automatic host-key rotation, so re-run this command when the server legitimately rotates its keys.`,
+	Example: "  lzr tunnel trust ru\n  lzr tunnel trust ru --fingerprint SHA256:mVN1EX9nGiimZzXFqXTZHrpx5RCasCMEEyBGavrfBFo",
+	Args:    cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		servers, err := config.LoadServers()
+		if err != nil {
+			return fmt.Errorf("loading servers: %w", err)
+		}
+		return tunnelTrust(servers, strings.ToLower(args[0]), tunnelTrustFingerprints)
+	},
+}
+
+func tunnelTrust(servers *config.ServersConfig, target string, fingerprints []string) error {
+	p := findTunnelProfile(servers, target)
+	if p == nil {
+		return errProfileNotFound(target)
+	}
+	if p.SSH.Host == "" {
+		return fmt.Errorf("no SSH configuration for profile %s", p.Name)
+	}
+	if err := core.ValidateSSHTarget(p.SSH.User, p.SSH.Host); err != nil {
+		return err
+	}
+	captured, err := core.CaptureHostKeys(p.SSH.Host, p.SSH.Port)
+	if err != nil {
+		return fmt.Errorf("cannot reach %s to capture its host key: %w", p.SSH.Host, err)
+	}
+
+	if len(fingerprints) > 0 {
+		matched, err := matchFingerprints(captured, fingerprints)
+		if err != nil {
+			return err
+		}
+		pinHostKeys(p, matched)
+	} else {
+		if !stdinIsTerminal() {
+			return clihint.Errorf(
+				"pass --fingerprint SHA256:... for non-interactive pinning",
+				"refusing to pin without confirmation")
+		}
+		if pinned, err := core.ParseHostKeys(p.SSH.HostKeys); err == nil && len(pinned) > 0 {
+			printHostKeyFingerprints(os.Stderr, "Currently pinned (old)", pinned)
+		}
+		printHostKeyFingerprints(os.Stderr, "Live capture (new)", captured)
+		fmt.Fprintln(os.Stderr, "Verify out-of-band on the server: ssh-keygen -lf /etc/ssh/ssh_host_*.pub")
+		fmt.Fprint(os.Stderr, "Pin these keys? [y/N]: ")
+		line, err := readTrustLine()
+		if err != nil {
+			return fmt.Errorf("reading confirmation: %w", err)
+		}
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "y", "yes":
+		default:
+			return fmt.Errorf("aborted; nothing pinned")
+		}
+		pinHostKeys(p, captured)
+	}
+
+	if err := config.SaveServers(servers); err != nil {
+		return fmt.Errorf("saving trusted host key: %w", err)
+	}
+	fmt.Printf("Pinned %d host key(s) for %s\n", len(p.SSH.HostKeys), p.Name)
+	return nil
+}
+
+// matchFingerprints returns exactly the captured keys whose fingerprints are
+// listed in wanted. A wanted value matching no captured key is an error —
+// nothing gets pinned on a partial verification failure. Repeated wanted
+// values are deduplicated so a fingerprint passed twice pins one key once.
+func matchFingerprints(captured []core.HostKey, wanted []string) ([]core.HostKey, error) {
+	byFP := make(map[string]core.HostKey, len(captured))
+	for _, k := range captured {
+		fp, err := k.Fingerprint()
+		if err != nil {
+			return nil, err
+		}
+		byFP[fp] = k
+	}
+	var matched []core.HostKey
+	added := make(map[string]bool, len(wanted))
+	for _, w := range wanted {
+		k, ok := byFP[w]
+		if !ok {
+			return nil, fmt.Errorf("fingerprint %s does not match any captured host key; nothing pinned", w)
+		}
+		if !added[w] {
+			added[w] = true
+			matched = append(matched, k)
+		}
+	}
+	return matched, nil
+}
+
 // findTunnelProfile resolves a profile by name: exact (case-insensitive)
 // matches always win; prefix matching is a second pass only. A trust
 // decision must bind to the profile the user actually named.
@@ -195,6 +295,9 @@ func matchesShortName(profileName, target string) bool {
 }
 
 func init() {
+	tunnelTrustCmd.Flags().StringArrayVar(&tunnelTrustFingerprints, "fingerprint", nil,
+		"pin only captured keys matching this SHA256 fingerprint (repeatable; enables non-interactive pinning)")
 	tunnelCmd.AddCommand(tunnelCloseCmd)
+	tunnelCmd.AddCommand(tunnelTrustCmd)
 	rootCmd.AddCommand(tunnelCmd)
 }

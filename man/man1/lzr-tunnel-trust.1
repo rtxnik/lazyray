@@ -1,0 +1,36 @@
+.nh
+.TH "LZR" "1" "Jan 2026" "lazyray" "lazyray Manual"
+
+.SH NAME
+lzr-tunnel-trust - Pin or re-pin a profile's SSH host key
+
+
+.SH SYNOPSIS
+\fBlzr tunnel trust  [flags]\fP
+
+
+.SH DESCRIPTION
+Capture the SSH host key of a profile's server, show its SHA256 fingerprint, and pin it into the profile after explicit confirmation.
+
+.PP
+Verify the fingerprint out-of-band before confirming (on the server: ssh-keygen -lf /etc/ssh/ssh\fIhost\fP*.pub). With --fingerprint the command is non-interactive: only captured keys whose fingerprints match the provided values are pinned, and a value that matches nothing is an error. Re-running the command replaces a previous pin (shown as "old") after the same confirmation. Pinning via a dedicated known_hosts disables OpenSSH's automatic host-key rotation, so re-run this command when the server legitimately rotates its keys.
+
+
+.SH OPTIONS
+\fB--fingerprint\fP=[]
+	pin only captured keys matching this SHA256 fingerprint (repeatable; enables non-interactive pinning)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for trust
+
+
+.SH EXAMPLE
+.EX
+  lzr tunnel trust ru
+  lzr tunnel trust ru --fingerprint SHA256:mVN1EX9nGiimZzXFqXTZHrpx5RCasCMEEyBGavrfBFo
+.EE
+
+
+.SH SEE ALSO
+\fBlzr-tunnel(1)\fP
