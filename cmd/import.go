@@ -57,7 +57,7 @@ func importSingleProfile(cmd *cobra.Command, rawURL string) error {
 	}
 
 	if err := core.ValidateProfile(profile); err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %v\n", err)
+		return fmt.Errorf("invalid profile: %w", err)
 	}
 
 	if core.Hysteria2HasPortHopping(rawURL) {
@@ -170,6 +170,10 @@ func importEncrypted(cmd *cobra.Command, data string) error {
 					continue
 				}
 			}
+		}
+		if err := core.ValidateProfile(&p); err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "Skipping %q: %v\n", core.StripControl(p.Name), err)
+			continue
 		}
 		if _, exists := servers.HasUUID(p.Server.UUID); exists && !importForce {
 			fmt.Fprintf(cmd.ErrOrStderr(), "Skipping %q (UUID exists, use --force)\n", core.StripControl(p.Name))
