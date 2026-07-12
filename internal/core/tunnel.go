@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/rtxnik/lazyray/internal/config"
+	"github.com/rtxnik/lazyray/internal/fsutil"
 )
 
 // TunnelStatus represents SSH tunnel state.
@@ -32,6 +33,22 @@ type tunnel struct {
 	cmd       *exec.Cmd
 	localPort int
 	profile   *config.Profile
+}
+
+// startSSHProcess launches the tunnel child process. Seam for tests.
+var startSSHProcess = func(args []string) (*exec.Cmd, error) {
+	cmd := exec.Command("ssh", args...)
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return cmd, nil
+}
+
+// SetStartSSHProcessForTest swaps the ssh spawn and returns a restore func.
+func SetStartSSHProcessForTest(fn func(args []string) (*exec.Cmd, error)) (restore func()) {
+	prev := startSSHProcess
+	startSSHProcess = fn
+	return func() { startSSHProcess = prev }
 }
 
 // NewTunnelManager creates a new tunnel manager.
@@ -61,26 +78,41 @@ func (tm *TunnelManager) Connect(profile *config.Profile) error {
 	if profile.SSH.Host == "" {
 		return fmt.Errorf("no SSH configuration for profile %s", profile.Name)
 	}
+	if err := ValidateSSHTarget(profile.SSH.User, profile.SSH.Host); err != nil {
+		return err
+	}
+
+	// Host-key trust gate: never spawn ssh for an untrusted or changed host.
+	pinned, err := ParseHostKeys(profile.SSH.HostKeys)
+	if err != nil {
+		return err
+	}
+	if len(pinned) == 0 {
+		captured, err := CaptureHostKeys(profile.SSH.Host, profile.SSH.Port)
+		if err != nil {
+			return fmt.Errorf("cannot reach %s to verify its identity: %w", profile.SSH.Host, err)
+		}
+		return &ErrHostKeyUnknown{Host: profile.SSH.Host, Port: profile.SSH.Port, Captured: captured}
+	}
+	if err := verifyPinnedHostKey(profile.SSH.Host, profile.SSH.Port, pinned); err != nil {
+		return err
+	}
+
+	if err := config.EnsureDirs(); err != nil {
+		return fmt.Errorf("preparing data dir: %w", err)
+	}
+	knownHostsPath := config.TunnelKnownHostsPath(profile.Name)
+	if err := fsutil.WriteFile(knownHostsPath, DeriveKnownHosts(profile.SSH.Host, profile.SSH.Port, pinned), 0o600); err != nil {
+		return fmt.Errorf("writing known_hosts: %w", err)
+	}
 
 	localPort, err := findFreePort()
 	if err != nil {
 		return fmt.Errorf("finding free port: %w", err)
 	}
 
-	forward := fmt.Sprintf("%d:127.0.0.1:%d", localPort, profile.SSH.Panel.Port)
-	args := []string{
-		"-L", forward,
-		"-p", strconv.Itoa(profile.SSH.Port),
-		"-i", profile.SSH.KeyPath,
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "ServerAliveInterval=30",
-		"-o", "ServerAliveCountMax=3",
-		"-N",
-		fmt.Sprintf("%s@%s", profile.SSH.User, profile.SSH.Host),
-	}
-
-	cmd := exec.Command("ssh", args...)
-	if err := cmd.Start(); err != nil {
+	cmd, err := startSSHProcess(buildSSHArgs(profile, localPort, knownHostsPath, hostKeyAlgorithmsFor(pinned)))
+	if err != nil {
 		return fmt.Errorf("starting SSH tunnel: %w", err)
 	}
 
@@ -255,4 +287,27 @@ func findFreePort() (int, error) {
 	port := ln.Addr().(*net.TCPAddr).Port
 	ln.Close()
 	return port, nil
+}
+
+// buildSSHArgs assembles the tunnel argv. Host-key verification is enforced
+// by ssh itself against the derived per-profile known_hosts — an independent
+// second layer behind the pre-flight dial, so a network change between the
+// two still cannot bypass pinning. "--" plus ValidateSSHTarget close the
+// option-injection hole (leading-'-' User/Host parsing as ssh options).
+func buildSSHArgs(profile *config.Profile, localPort int, knownHostsPath string, algos []string) []string {
+	forward := fmt.Sprintf("%d:127.0.0.1:%d", localPort, profile.SSH.Panel.Port)
+	return []string{
+		"-L", forward,
+		"-p", strconv.Itoa(profile.SSH.Port),
+		"-i", profile.SSH.KeyPath,
+		"-o", "StrictHostKeyChecking=yes",
+		"-o", "UserKnownHostsFile=" + knownHostsPath,
+		"-o", "GlobalKnownHostsFile=/dev/null",
+		"-o", "HostKeyAlgorithms=" + strings.Join(algos, ","),
+		"-o", "ServerAliveInterval=30",
+		"-o", "ServerAliveCountMax=3",
+		"-N",
+		"--",
+		fmt.Sprintf("%s@%s", profile.SSH.User, profile.SSH.Host),
+	}
 }

@@ -158,6 +158,7 @@ lazyray reads two YAML files from your config directory:
 | `port` | int | SSH port |
 | `user` | string | SSH user |
 | `keyPath` | string | path to the private key |
+| `hostKeys` | list | pinned SSH host public keys (`"<type> <base64>"` entries); empty means TOFU mode |
 | `panel` | object | admin-panel target: `port`, `path` |
 
 ### `routing` — `ProfileRouting`

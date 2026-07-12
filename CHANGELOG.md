@@ -69,6 +69,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keys rather than a single key: a release is accepted if any trusted key
   verifies its signature. The in-binary self-updater is now rotation-ready with
   no change to the signed-artifact filenames or the download path.
+- SSH tunnels now verify the server host key: first connect requires explicit
+  fingerprint confirmation (TUI prompt, CLI prompt, or `lzr tunnel trust`),
+  pinned keys are stored in the profile and enforced with
+  `StrictHostKeyChecking=yes` against a per-profile known_hosts, and a changed
+  host key refuses to connect until explicitly re-trusted. The ssh destination
+  is also passed after `--` and SSH user/host values starting with `-` are
+  rejected, closing an argument-injection vector.
 
 ## [1.0.0] - 2026-07-02
 

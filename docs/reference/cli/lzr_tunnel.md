@@ -30,4 +30,5 @@ lzr tunnel [name] [flags]
 
 * [lzr](lzr.md)	 - Terminal UI for managing Xray-core proxy configurations
 * [lzr tunnel close](lzr_tunnel_close.md)	 - Close all SSH tunnels
+* [lzr tunnel trust](lzr_tunnel_trust.md)	 - Pin or re-pin a profile's SSH host key
 

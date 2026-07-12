@@ -34,7 +34,7 @@ func TestIsOurXray_RejectsForeignAndNonPositive(t *testing.T) {
 
 func TestIsOurTunnel_MatchesSSHForward(t *testing.T) {
 	restore := SetProcessCmdlineForTest(func(int) (string, error) {
-		return "ssh -L 51234:127.0.0.1:443 -p 22 -i /k -o StrictHostKeyChecking=no -N user@host", nil
+		return "ssh -L 51234:127.0.0.1:443 -p 22 -i /k -o StrictHostKeyChecking=yes -N -- user@host", nil
 	})
 	defer restore()
 	if !IsOurTunnel(4242) {
