@@ -12,10 +12,11 @@ import (
 )
 
 var (
-	importName    string
-	importForce   bool
-	importSub     string
-	importDecrypt string
+	importName         string
+	importForce        bool
+	importSub          string
+	importDecrypt      string
+	importAllowRouting bool
 )
 
 var importCmd = &cobra.Command{
@@ -52,11 +53,11 @@ func importSingleProfile(cmd *cobra.Command, rawURL string) error {
 	}
 
 	if importName != "" {
-		profile.Name = importName
+		profile.Name = core.StripControl(importName)
 	}
 
 	if err := core.ValidateProfile(profile); err != nil {
-		fmt.Fprintf(cmd.ErrOrStderr(), "Warning: %v\n", err)
+		return fmt.Errorf("invalid profile: %w", err)
 	}
 
 	if core.Hysteria2HasPortHopping(rawURL) {
@@ -87,10 +88,10 @@ func importSingleProfile(cmd *cobra.Command, rawURL string) error {
 		return fmt.Errorf("writing xray config: %w", err)
 	}
 
-	fmt.Printf("Imported profile: %s\n", profile.Name)
-	fmt.Printf("  Server:  %s:%d\n", profile.Server.Address, profile.Server.Port)
+	fmt.Printf("Imported profile: %s\n", core.StripControl(profile.Name))
+	fmt.Printf("  Server:  %s:%d\n", core.StripControl(profile.Server.Address), profile.Server.Port)
 	fmt.Printf("  UUID:    %s\n", config.MaskUUID(profile.Server.UUID))
-	fmt.Printf("  Network: %s\n", profile.Server.Transport.Network)
+	fmt.Printf("  Network: %s\n", core.StripControl(profile.Server.Transport.Network))
 	fmt.Println("Config written to", config.XrayConfigPath())
 	return nil
 }
@@ -150,8 +151,32 @@ func importEncrypted(cmd *cobra.Command, data string) error {
 
 	added := 0
 	for _, p := range profiles {
+		if core.HasRoutingOverrides(&p) {
+			if !importAllowRouting {
+				fmt.Fprintf(cmd.ErrOrStderr(),
+					"Warning: %q carries routing/DNS overrides (%d bypass, %d block, %d dns rules); dropping them. Re-import with --allow-routing to keep them.\n",
+					p.Name, len(p.Routing.Bypass), len(p.Routing.Block), len(p.Routing.DNSRules))
+				p.Routing = config.ProfileRouting{}
+			} else {
+				bad := false
+				for _, rule := range p.Routing.DNSRules {
+					if err := core.ValidateDNSServer(rule.Server); err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "Skipping %q: %v\n", p.Name, err)
+						bad = true
+						break
+					}
+				}
+				if bad {
+					continue
+				}
+			}
+		}
+		if err := core.ValidateProfile(&p); err != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "Skipping %q: %v\n", core.StripControl(p.Name), err)
+			continue
+		}
 		if _, exists := servers.HasUUID(p.Server.UUID); exists && !importForce {
-			fmt.Fprintf(cmd.ErrOrStderr(), "Skipping %q (UUID exists, use --force)\n", p.Name)
+			fmt.Fprintf(cmd.ErrOrStderr(), "Skipping %q (UUID exists, use --force)\n", core.StripControl(p.Name))
 			continue
 		}
 		if len(servers.Profiles) == 0 {
@@ -174,5 +199,6 @@ func init() {
 	importCmd.Flags().BoolVarP(&importForce, "force", "f", false, "Import even if UUID already exists")
 	importCmd.Flags().StringVar(&importSub, "sub", "", "Import from subscription URL")
 	importCmd.Flags().StringVar(&importDecrypt, "decrypt", "", "Decrypt encrypted export with password")
+	importCmd.Flags().BoolVar(&importAllowRouting, "allow-routing", false, "Honor routing/DNS overrides carried by an encrypted import (validated against an allowlist)")
 	rootCmd.AddCommand(importCmd)
 }

@@ -62,6 +62,9 @@ func ParseSubscriptionBody(body string) ([]*config.Profile, error) {
 		if err != nil {
 			continue
 		}
+		if err := ValidateProfile(profile); err != nil {
+			continue
+		}
 		profiles = append(profiles, profile)
 	}
 

@@ -294,6 +294,7 @@ func subscriptionAutoRefreshTick() tea.Cmd {
 // Error sticky). The clear is keyed to the notice ID so a stale timer never
 // clears a newer tail.
 func (a *App) notify(n notify.Notice) tea.Cmd {
+	n.Message = core.StripControl(n.Message)
 	n.Time = time.Now()
 	if n.Severity == notify.Error && n.Hint == "" {
 		n.Hint = teachHint(n.Source, commands.KeyDisplay(a.keys.Doctor))
@@ -710,12 +711,16 @@ func (a *App) handleRenameKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if idx < 0 || idx >= len(a.servers.Profiles) {
 			return a, nil
 		}
-		a.servers.Profiles[idx].Name = newName
+		sanitized := core.StripControl(newName)
+		if sanitized == "" {
+			return a, a.setWarning("profile name cannot be empty")
+		}
+		a.servers.Profiles[idx].Name = sanitized
 		if err := config.SaveServers(a.servers); err != nil {
 			return a, a.setError(fmt.Errorf("saving profile: %w", err))
 		}
 		a.profiles.SetProfiles(a.servers.Profiles)
-		return a, a.setMessage(fmt.Sprintf("renamed to %s", newName))
+		return a, a.setMessage(fmt.Sprintf("renamed to %s", sanitized))
 	case key.Matches(msg, a.keys.Escape):
 		a.profiles.CancelRename()
 		return a, nil
@@ -989,7 +994,7 @@ func (a *App) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			profile := a.profiles.SelectedProfile()
 			if profile != nil {
 				return a, a.showConfirmModal("Delete Profile",
-					fmt.Sprintf("Delete profile %q?", profile.Name), "delete:"+profile.Name)
+					fmt.Sprintf("Delete profile %q?", core.StripControl(profile.Name)), "delete:"+profile.Name)
 			}
 		}
 		return a, nil
@@ -1077,14 +1082,14 @@ func (a *App) activateSelectedProfile() tea.Cmd {
 		// Running with different profile — confirm before switching
 		return a.showConfirmModal(
 			"Switch Profile",
-			fmt.Sprintf("Switch to %s and restart?", profile.Name),
+			fmt.Sprintf("Switch to %s and restart?", core.StripControl(profile.Name)),
 			"switch:"+profile.Name,
 		)
 	}
 
 	// Not running — test connection, then switch + start
 	name := profile.Name
-	loadCmd := a.startLoading(fmt.Sprintf("testing %s...", name))
+	loadCmd := a.startLoading(fmt.Sprintf("testing %s...", core.StripControl(name)))
 	settings := a.settings
 	return tea.Batch(loadCmd, func() tea.Msg {
 		r := core.ProbeProfile(*profile, lifecycle.ProbeContextFor(name, settings))
@@ -1604,7 +1609,7 @@ func (a *App) showDiffModal(profile *config.Profile) tea.Cmd {
 		oldLines = strings.Split(string(oldJSON), "\n")
 	}
 
-	title := fmt.Sprintf("Config diff: → %s", profile.Name)
+	title := fmt.Sprintf("Config diff: → %s", core.StripControl(profile.Name))
 	m := modals.NewDiffModal(title, oldLines, newLines, a.width, a.height)
 	a.modal = m
 	a.modalID = ModalDiff
@@ -1613,7 +1618,7 @@ func (a *App) showDiffModal(profile *config.Profile) tea.Cmd {
 
 func (a *App) showQRModal(profile *config.Profile) tea.Cmd {
 	url := core.ToProxyURL(profile)
-	m := modals.NewQRModal(profile.Name, url, a.width, a.height)
+	m := modals.NewQRModal(core.StripControl(profile.Name), url, a.width, a.height)
 	a.modal = m
 	a.modalID = ModalQR
 	return m.Init()

@@ -255,6 +255,9 @@ func ImportEncrypted(encrypted string, password string) ([]config.Profile, error
 	if err := json.Unmarshal(plaintext, &profiles); err != nil {
 		return nil, fmt.Errorf("parsing decrypted profiles: %w", err)
 	}
+	for i := range profiles {
+		SanitizeProfileDisplay(&profiles[i])
+	}
 	return profiles, nil
 }
 

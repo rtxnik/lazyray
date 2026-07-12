@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/rtxnik/lazyray/internal/config"
+	"github.com/rtxnik/lazyray/internal/core"
 	"github.com/rtxnik/lazyray/internal/tui/theme"
 )
 
@@ -229,7 +230,7 @@ func (p *ProfilesPanel) View() string {
 		indicator := latencyIndicator(profile.Latency)
 
 		var line string
-		name := profile.Name
+		name := core.StripControl(profile.Name)
 		latencySuffix := ""
 		if profile.Latency > 0 {
 			latencySuffix = fmt.Sprintf(" %dms", profile.Latency)

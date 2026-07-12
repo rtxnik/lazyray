@@ -358,12 +358,12 @@ func (s *StatusPanel) renderTopology() string {
 	segs := []string{node.Render("you"), node.Render(fmt.Sprintf(":%d", socks))}
 	if s.ActiveProfile.IsChained() {
 		for _, srv := range s.ActiveProfile.ChainServers() {
-			segs = append(segs, node.Render(fmt.Sprintf("%s:%d", srv.Address, srv.Port)))
+			segs = append(segs, node.Render(fmt.Sprintf("%s:%d", core.StripControl(srv.Address), srv.Port)))
 		}
 	} else {
 		segs = append(segs,
 			node.Render("["+strings.ToUpper(s.ActiveProfile.Server.GetProtocol())+"]"),
-			node.Render(fmt.Sprintf("%s:%d", s.ActiveProfile.Server.Address, s.ActiveProfile.Server.Port)))
+			node.Render(fmt.Sprintf("%s:%d", core.StripControl(s.ActiveProfile.Server.Address), s.ActiveProfile.Server.Port)))
 	}
 	exit := "exit"
 	if s.ExitIP != "" {

@@ -148,7 +148,12 @@ func ParseProxyURL(rawURL string) (*config.Profile, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if i := strings.Index(rawURL, "://"); i >= 0 {
 		if proto, ok := schemeToProtocol[rawURL[:i]]; ok {
-			return protocols[proto].Parse(rawURL)
+			p, err := protocols[proto].Parse(rawURL)
+			if err != nil {
+				return nil, err
+			}
+			SanitizeProfileDisplay(p)
+			return p, nil
 		}
 	}
 	return nil, fmt.Errorf("unsupported protocol URL (expected vless://, vmess://, trojan://, ss://, or hysteria2://)")

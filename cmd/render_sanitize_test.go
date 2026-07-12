@@ -1,0 +1,86 @@
+package cmd
+
+import (
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/rtxnik/lazyray/internal/config"
+)
+
+// isolateConfig points the config/data directories at a throwaway temp dir on
+// every platform: HOME drives ConfigDir/DataDir on unix, while APPDATA and
+// LOCALAPPDATA drive them on windows. Setting all three keeps these tests from
+// touching the real user config regardless of GOOS.
+func isolateConfig(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("APPDATA", filepath.Join(dir, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(dir, "AppData", "Local"))
+}
+
+// captureStdout runs f with os.Stdout redirected to a pipe and returns what was written.
+func captureStdout(t *testing.T, f func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	f()
+	_ = w.Close()
+	os.Stdout = old
+	out, _ := io.ReadAll(r)
+	return string(out)
+}
+
+func TestConfigList_StripsControlFromStoredName(t *testing.T) {
+	isolateConfig(t)
+	servers := &config.ServersConfig{Profiles: []config.Profile{{
+		Name:    "e\x1b[31mvil",
+		Default: true,
+		Server:  config.ServerConfig{Address: "h.example", Port: 443, UUID: "11111111-1111-1111-1111-111111111111", Transport: config.TransportConfig{Network: "tcp"}},
+	}}}
+	if err := config.SaveServers(servers); err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() {
+		if err := configListCmd.RunE(configListCmd, nil); err != nil {
+			t.Fatalf("config list: %v", err)
+		}
+	})
+	if strings.ContainsRune(out, 0x1b) {
+		t.Fatalf("ESC reached terminal output: %q", out)
+	}
+	if !strings.Contains(out, "e[31mvil") {
+		t.Fatalf("sanitized name did not reach terminal output: %q", out)
+	}
+}
+
+func TestConfigSwitch_StripsControlFromStoredName(t *testing.T) {
+	isolateConfig(t)
+	name := "e\x1b[31mvil"
+	servers := &config.ServersConfig{Profiles: []config.Profile{{
+		Name:    name,
+		Default: false,
+		Server:  config.ServerConfig{Address: "h.example", Port: 443, UUID: "11111111-1111-1111-1111-111111111111", Transport: config.TransportConfig{Network: "tcp"}},
+	}}}
+	if err := config.SaveServers(servers); err != nil {
+		t.Fatal(err)
+	}
+	out := captureStdout(t, func() {
+		if err := configSwitchCmd.RunE(configSwitchCmd, []string{name}); err != nil {
+			t.Fatalf("config switch: %v", err)
+		}
+	})
+	if strings.ContainsRune(out, 0x1b) {
+		t.Fatalf("ESC reached terminal output: %q", out)
+	}
+	if !strings.Contains(out, "e[31mvil") {
+		t.Fatalf("sanitized name did not reach terminal output: %q", out)
+	}
+}

@@ -73,6 +73,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read `LZRENC2` data.
 - `stats.json` is written `0600`, and freshly created config/data/log/backup
   directories are `0700`.
+- Generated PAC files now JSON-encode every routing value, so a routing entry
+  in an imported profile can no longer break out of the PAC JavaScript and
+  inject script into the file browsers execute.
+- Untrusted profile fields (name, server address, transport, and SSH host) are
+  stripped of terminal control/escape bytes both on import and before any
+  terminal output, preventing ANSI/OSC terminal-escape injection from a crafted
+  share link, subscription, or encrypted export.
+- Encrypted profile imports no longer silently apply the routing and DNS
+  overrides they carry: those are dropped with a warning unless the new
+  `lzr import --allow-routing` flag is given, and each DNS server is then
+  checked against an allowlist (plain IP or a DoH/DoT URL).
+- Profile validation is now enforced before a profile is saved on every import
+  path and covers chained hops, so a share link or export with an out-of-range
+  port can no longer persist a broken profile.
 - Release signatures are now verified against an embedded trust-list of signing
   keys rather than a single key: a release is accepted if any trusted key
   verifies its signature. The in-binary self-updater is now rotation-ready with

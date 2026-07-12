@@ -299,7 +299,7 @@ func (m *TunnelModal) View() string {
 			profile := m.findProfile(s.Name)
 			if profile != nil && profile.SSH.Host != "" {
 				sshCmd := fmt.Sprintf("ssh -p %d %s@%s",
-					profile.SSH.Port, profile.SSH.User, profile.SSH.Host)
+					profile.SSH.Port, core.StripControl(profile.SSH.User), core.StripControl(profile.SSH.Host))
 				b.WriteString(fmt.Sprintf("    %s\n", dim.Render(sshCmd)))
 			}
 

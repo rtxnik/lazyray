@@ -56,6 +56,21 @@ func TestImportProfile_NonFirstNotDefault(t *testing.T) {
 	}
 }
 
+func TestImportProfile_RejectsInvalidPortAndDoesNotPersist(t *testing.T) {
+	saved := false
+	svc := &Service{saveServers: func(*config.ServersConfig) error { saved = true; return nil }}
+	servers := &config.ServersConfig{}
+
+	bad := profile("bad", "uuid-x")
+	bad.Server.Port = 70000
+	if _, err := svc.ImportProfile(servers, bad, false); err == nil {
+		t.Fatal("ImportProfile() should reject an out-of-range port")
+	}
+	if len(servers.Profiles) != 0 || saved {
+		t.Fatalf("invalid profile must not persist or save; profiles=%d saved=%v", len(servers.Profiles), saved)
+	}
+}
+
 func TestImportProfile_DuplicateUUID_NoForce(t *testing.T) {
 	called := false
 	svc := &Service{saveServers: func(*config.ServersConfig) error { called = true; return nil }}

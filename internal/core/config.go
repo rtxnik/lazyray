@@ -487,6 +487,16 @@ func ValidateProfile(profile *config.Profile) error {
 		}
 	}
 
+	for i := range profile.Chain {
+		node := profile.Chain[i]
+		if node.Address == "" {
+			errs = append(errs, fmt.Sprintf("chain[%d] server address is empty", i))
+		}
+		if node.Port <= 0 || node.Port > 65535 {
+			errs = append(errs, fmt.Sprintf("chain[%d] invalid port %d (must be 1-65535)", i, node.Port))
+		}
+	}
+
 	if len(errs) > 0 {
 		return fmt.Errorf("profile %q: %s", profile.Name, strings.Join(errs, "; "))
 	}

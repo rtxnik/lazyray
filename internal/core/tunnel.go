@@ -90,7 +90,7 @@ func (tm *TunnelManager) Connect(profile *config.Profile) error {
 	if len(pinned) == 0 {
 		captured, err := CaptureHostKeys(profile.SSH.Host, profile.SSH.Port)
 		if err != nil {
-			return fmt.Errorf("cannot reach %s to verify its identity: %w", profile.SSH.Host, err)
+			return fmt.Errorf("cannot reach %s to verify its identity: %w", StripControl(profile.SSH.Host), err)
 		}
 		return &ErrHostKeyUnknown{Host: profile.SSH.Host, Port: profile.SSH.Port, Captured: captured}
 	}

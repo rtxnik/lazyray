@@ -80,7 +80,7 @@ var configListCmd = &cobra.Command{
 			if p.Default {
 				marker = "* "
 			}
-			fmt.Printf("%s[%d] %s (%s:%d)\n", marker, i, p.Name, p.Server.Address, p.Server.Port)
+			fmt.Printf("%s[%d] %s (%s:%d)\n", marker, i, core.StripControl(p.Name), core.StripControl(p.Server.Address), p.Server.Port)
 		}
 		return nil
 	},
@@ -120,7 +120,7 @@ var configSwitchCmd = &cobra.Command{
 			return fmt.Errorf("saving servers: %w", err)
 		}
 
-		fmt.Printf("Switched to profile: %s\n", servers.Profiles[found].Name)
+		fmt.Printf("Switched to profile: %s\n", core.StripControl(servers.Profiles[found].Name))
 		return nil
 	},
 }
@@ -425,7 +425,7 @@ var configDuplicateCmd = &cobra.Command{
 			return fmt.Errorf("saving servers: %w", err)
 		}
 
-		fmt.Printf("Duplicated profile: %s → %s\n", source.Name, dup.Name)
+		fmt.Printf("Duplicated profile: %s → %s\n", core.StripControl(source.Name), core.StripControl(dup.Name))
 		return nil
 	},
 }
