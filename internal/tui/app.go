@@ -710,7 +710,7 @@ func (a *App) handleRenameKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if idx < 0 || idx >= len(a.servers.Profiles) {
 			return a, nil
 		}
-		a.servers.Profiles[idx].Name = newName
+		a.servers.Profiles[idx].Name = core.StripControl(newName)
 		if err := config.SaveServers(a.servers); err != nil {
 			return a, a.setError(fmt.Errorf("saving profile: %w", err))
 		}

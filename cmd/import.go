@@ -52,7 +52,7 @@ func importSingleProfile(cmd *cobra.Command, rawURL string) error {
 	}
 
 	if importName != "" {
-		profile.Name = importName
+		profile.Name = core.StripControl(importName)
 	}
 
 	if err := core.ValidateProfile(profile); err != nil {
