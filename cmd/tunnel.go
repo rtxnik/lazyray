@@ -126,7 +126,7 @@ func tunnelTrust(servers *config.ServersConfig, target string, fingerprints []st
 	if err := config.SaveServers(servers); err != nil {
 		return fmt.Errorf("saving trusted host key: %w", err)
 	}
-	fmt.Printf("Pinned %d host key(s) for %s\n", len(p.SSH.HostKeys), p.Name)
+	fmt.Printf("Pinned %d host key(s) for %s\n", len(p.SSH.HostKeys), core.StripControl(p.Name))
 	return nil
 }
 
@@ -217,7 +217,7 @@ func tunnelConnectByName(servers *config.ServersConfig, target string) error {
 func trustAndRetry(servers *config.ServersConfig, p *config.Profile, unknown *core.ErrHostKeyUnknown) error {
 	if !stdinIsTerminal() {
 		return clihint.Errorf(
-			"run 'lzr tunnel trust "+p.Name+"' interactively (or with --fingerprint) first",
+			"run 'lzr tunnel trust "+core.StripControl(p.Name)+"' interactively (or with --fingerprint) first",
 			"host %s is not trusted yet", unknown.Host)
 	}
 	fmt.Fprintf(os.Stderr, "First connection to %s (%s).\n",

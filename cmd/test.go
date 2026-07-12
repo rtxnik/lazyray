@@ -73,7 +73,7 @@ diagnostics use 'lzr doctor'.`,
 		}
 
 		fmt.Printf("Testing connection to %s (%s:%d)...\n",
-			profile.Name, profile.Server.Address, profile.Server.Port)
+			core.StripControl(profile.Name), core.StripControl(profile.Server.Address), profile.Server.Port)
 
 		settings, err := config.LoadSettings()
 		if err != nil {
@@ -156,7 +156,7 @@ func testAllProfiles(servers *config.ServersConfig) error {
 	var results []profileLatency
 	for i := range servers.Profiles {
 		p := &servers.Profiles[i]
-		fmt.Printf("  Testing %s (%s:%d)... ", p.Name, p.Server.Address, p.Server.Port)
+		fmt.Printf("  Testing %s (%s:%d)... ", core.StripControl(p.Name), core.StripControl(p.Server.Address), p.Server.Port)
 
 		r := core.ProbeProfile(*p, lifecycle.ProbeContextFor(p.Name, settings))
 		switch r.Status {

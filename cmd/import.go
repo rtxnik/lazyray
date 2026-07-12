@@ -87,10 +87,10 @@ func importSingleProfile(cmd *cobra.Command, rawURL string) error {
 		return fmt.Errorf("writing xray config: %w", err)
 	}
 
-	fmt.Printf("Imported profile: %s\n", profile.Name)
-	fmt.Printf("  Server:  %s:%d\n", profile.Server.Address, profile.Server.Port)
+	fmt.Printf("Imported profile: %s\n", core.StripControl(profile.Name))
+	fmt.Printf("  Server:  %s:%d\n", core.StripControl(profile.Server.Address), profile.Server.Port)
 	fmt.Printf("  UUID:    %s\n", config.MaskUUID(profile.Server.UUID))
-	fmt.Printf("  Network: %s\n", profile.Server.Transport.Network)
+	fmt.Printf("  Network: %s\n", core.StripControl(profile.Server.Transport.Network))
 	fmt.Println("Config written to", config.XrayConfigPath())
 	return nil
 }
@@ -151,7 +151,7 @@ func importEncrypted(cmd *cobra.Command, data string) error {
 	added := 0
 	for _, p := range profiles {
 		if _, exists := servers.HasUUID(p.Server.UUID); exists && !importForce {
-			fmt.Fprintf(cmd.ErrOrStderr(), "Skipping %q (UUID exists, use --force)\n", p.Name)
+			fmt.Fprintf(cmd.ErrOrStderr(), "Skipping %q (UUID exists, use --force)\n", core.StripControl(p.Name))
 			continue
 		}
 		if len(servers.Profiles) == 0 {
