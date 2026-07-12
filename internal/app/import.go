@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/rtxnik/lazyray/internal/config"
+	"github.com/rtxnik/lazyray/internal/core"
 )
 
 // DuplicateUUIDError reports an import blocked because a profile with the same
@@ -21,6 +22,12 @@ func (e *DuplicateUUIDError) Error() string {
 // sync, and returns the raw save error unwrapped so each shell keeps its own
 // wrapping.
 func (s *Service) ImportProfile(servers *config.ServersConfig, p *config.Profile, force bool) (*config.Profile, error) {
+	// Validate before persisting so no import boundary (CLI single-import or the
+	// TUI import handler, both of which funnel through here) can save a profile
+	// with an out-of-range port or empty required field.
+	if err := core.ValidateProfile(p); err != nil {
+		return nil, err
+	}
 	if existingName, exists := servers.HasUUID(p.Server.UUID); exists && !force {
 		return nil, &DuplicateUUIDError{ExistingName: existingName}
 	}
