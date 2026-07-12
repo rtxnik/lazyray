@@ -23,6 +23,7 @@ func startSleeper(t *testing.T, secs string) *exec.Cmd {
 }
 
 func TestSuperviseXrayReal_CancelTerminatesChild(t *testing.T) {
+	withTempData(t)
 	c := startSleeper(t, "30")
 	pid := c.Process.Pid
 	s := &Supervisor{Settings: testSettings(), cmd: c}
@@ -30,7 +31,8 @@ func TestSuperviseXrayReal_CancelTerminatesChild(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { _ = s.superviseXrayReal(ctx, pid); close(done) }()
+	st := &State{XrayPID: pid}
+	go func() { _ = s.superviseXrayReal(ctx, st); close(done) }()
 
 	cancel()
 	select {
@@ -45,6 +47,7 @@ func TestSuperviseXrayReal_CancelTerminatesChild(t *testing.T) {
 }
 
 func TestSuperviseXrayReal_AutoRestartsOnUnexpectedExit(t *testing.T) {
+	withTempData(t)
 	first := startSleeper(t, "0.2") // exits quickly → triggers a restart
 	s := &Supervisor{Settings: testSettings(), cmd: first}
 	s.Settings.Xray.AutoRestart = true
@@ -59,7 +62,8 @@ func TestSuperviseXrayReal_AutoRestartsOnUnexpectedExit(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { _ = s.superviseXrayReal(ctx, first.Process.Pid); close(done) }()
+	st := &State{XrayPID: first.Process.Pid}
+	go func() { _ = s.superviseXrayReal(ctx, st); close(done) }()
 
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) && restarts.Load() < 1 {

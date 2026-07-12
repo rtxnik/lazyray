@@ -44,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Hysteria2 share links keep the base port when a port-hopping range is set
   (exported as `443,5000-6000`), so export→import no longer changes the
   connection port.
+- The background supervisor now tracks the current xray process across
+  auto-restarts, so teardown and crash self-heal always target the running
+  process instead of a stale pre-restart PID.
+- Crash-loop handling is paced and self-limiting: a healthy run restores the
+  full restart budget, rapid repeated crashes are backed off and eventually
+  abandoned, and a shutdown never spawns a doomed process.
+- Starting `lzr start` while a session is already running no longer records a
+  spurious startup failure (so `lzr status`/`lzr doctor` stay accurate).
 
 ### Security
 - `lzr config backup` now encrypts archives by default — backups bundle

@@ -3,6 +3,7 @@ package lifecycle
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -70,3 +71,19 @@ type StagedError struct {
 
 func (e *StagedError) Error() string { return fmt.Sprintf("%s: %v", e.Stage, e.Err) }
 func (e *StagedError) Unwrap() error { return e.Err }
+
+// StartupFailureStage returns the stage to record for a supervisor error, or ""
+// when the error must NOT be recorded as a startup failure: a plain error (a
+// post-success teardown failure, not a *StagedError), or an expected lock
+// contention (another supervisor is already live). A genuine lock-file failure
+// (e.g. permission denied) is not ErrLocked and IS recorded.
+func StartupFailureStage(err error) string {
+	var se *StagedError
+	if !errors.As(err, &se) {
+		return ""
+	}
+	if errors.Is(err, ErrLocked) {
+		return ""
+	}
+	return se.Stage
+}

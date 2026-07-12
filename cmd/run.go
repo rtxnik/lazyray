@@ -3,7 +3,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/rtxnik/lazyray/internal/config"
@@ -51,13 +50,12 @@ var runCmd = &cobra.Command{
 			Proxy:    mode,
 		}
 		if err := sup.Run(context.Background()); err != nil {
-			// Only genuine startup-phase failures (lock/routing/start/state) are
-			// recorded as a last-startup-error. A plain error here is a post-success
-			// teardown failure, which is NOT a startup failure and must not make
-			// `lzr doctor` report a spurious startup FAIL.
-			var se *lifecycle.StagedError
-			if errors.As(err, &se) {
-				_ = lifecycle.WriteStartupError(se.Stage, err)
+			// Record only genuine startup-phase failures. A post-success teardown
+			// error is not a startup failure, and lock contention is the expected
+			// outcome of a double-start — neither should make `lzr doctor` report
+			// a spurious startup FAIL.
+			if stage := lifecycle.StartupFailureStage(err); stage != "" {
+				_ = lifecycle.WriteStartupError(stage, err)
 			}
 			return err
 		}

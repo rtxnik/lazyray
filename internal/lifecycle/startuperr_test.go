@@ -93,3 +93,22 @@ func TestStagedError_WrapsAndUnwraps(t *testing.T) {
 		t.Error("Error() = empty string, want a message")
 	}
 }
+
+func TestStartupFailureStage(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"nil", nil, ""},
+		{"plain error (post-success teardown)", errors.New("teardown boom"), ""},
+		{"staged start failure is recorded", &StagedError{Stage: "start", Err: errors.New("exec fail")}, "start"},
+		{"lock contention is expected, not recorded", &StagedError{Stage: "lock", Err: ErrLocked}, ""},
+		{"genuine lock-file failure is recorded", &StagedError{Stage: "lock", Err: errors.New("permission denied")}, "lock"},
+	}
+	for _, tc := range tests {
+		if got := StartupFailureStage(tc.err); got != tc.want {
+			t.Errorf("%s: StartupFailureStage() = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}

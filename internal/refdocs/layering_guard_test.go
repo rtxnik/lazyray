@@ -273,7 +273,7 @@ var sanctionedLifecycleImporters = map[string]bool{
 var shellLifecycleAllow = map[string]map[string]bool{
 	// __run hosts the resident supervisor itself -- the one sanctioned deep
 	// consumer of lifecycle in cmd.
-	"cmd/run.go": symbolSet("Supervisor", "Owner", "OwnerDaemon", "ProxyDefault", "ProxyForceOff", "ProxyForceOn", "StagedError", "WriteStartupError"),
+	"cmd/run.go": symbolSet("Supervisor", "Owner", "OwnerDaemon", "ProxyDefault", "ProxyForceOff", "ProxyForceOn", "StartupFailureStage", "WriteStartupError"),
 	// start/stop/restart keep idempotency checks, crash self-heal and the
 	// CLI-only graceful-signal path (Service.Disconnect deliberately omits
 	// the hard-kill escalation these commands pair with it).
