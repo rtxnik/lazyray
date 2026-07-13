@@ -33,20 +33,49 @@
 
 ## Installation
 
-The binary is named **`lzr`**. Every release ships a minisign-signed checksum
-manifest (`checksums.txt` + `checksums.txt.minisig`); the install paths below
-verify it before installing.
+The binary is named **`lzr`**. Every release ships a **minisign-signed** checksum
+manifest (`checksums.txt` + `checksums.txt.minisig`) that lists **every** asset —
+archives and `.deb`/`.rpm`/`.apk` packages alike — plus a keyless SLSA
+build-provenance attestation. **Verifying one of those is what establishes
+trust**, whichever install method you use below.
+
+### Verify what you download (recommended)
+
+Either check is sufficient; each uses a trust root independent of the download.
+Verify the signed manifest first, then confirm your asset against it:
+
+```bash
+# minisign — one signature authenticates every asset listed in checksums.txt
+minisign -Vm checksums.txt -P RWT1X2unwbak2iRSpo1E/k3BWHDjQCzAwgPJft7dtXwRS+3IFxNkR0Ag
+sha256sum -c --ignore-missing checksums.txt      # then confirm your asset's line
+
+# or GitHub's SLSA build provenance (a disjoint, keyless root)
+gh attestation verify lazyray_<version>_<os>_<arch>.tar.gz --repo rtxnik/lazyray
+```
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew install rtxnik/tap/lzr
+```
+
+Homebrew pins each release's `sha256` in the tap formula (a second channel) and
+verifies it on download.
 
 ### Linux packages (deb / rpm / apk)
 
-Download the matching package for your architecture from
-[**Releases**](https://github.com/rtxnik/lazyray/releases/latest), then:
+Download the matching package from
+[**Releases**](https://github.com/rtxnik/lazyray/releases/latest), **verify it**
+against the signed `checksums.txt` (or `gh attestation verify`) as above, then:
 
 ```bash
 sudo dpkg -i  lazyray_<version>_linux_amd64.deb     # Debian / Ubuntu
 sudo rpm -i   lazyray_<version>_linux_amd64.rpm     # Fedora / RHEL / openSUSE
 sudo apk add --allow-untrusted lazyray_<version>_linux_amd64.apk   # Alpine
 ```
+
+> A downloaded package is **not** signature-checked by `dpkg`/`rpm`/`apk` on its
+> own — the verification step above is what makes this path trustworthy.
 
 Packages install the `lzr` binary, shell completions, and the man page. They do
 not register or start any background service and never require root for config —
@@ -59,23 +88,34 @@ After installing, fetch xray-core with `lzr update apply`.
 curl -fsSL https://raw.githubusercontent.com/rtxnik/lazyray/main/scripts/install.sh | sh
 ```
 
-The script always verifies the archive's SHA-256 against the signed
-`checksums.txt`. If `minisign` is present on your machine it additionally
-verifies `checksums.txt.minisig` against the public key embedded in the
-script — the full supply-chain check. If `minisign` is absent the script
-prints a loud warning and continues at checksum-only level.
+The script always verifies the archive's SHA-256 against `checksums.txt` and, **by
+default, requires a valid minisign signature** over it from every release signer
+(fail-closed). If `minisign` is not installed, or a required signature is missing,
+**it refuses to install** and points you at the options above.
 
-> **Trust model:** a bare `curl … | sh` without `minisign` gives only
-> checksum-level integrity (protects against corruption, MITM-beyond-TLS, and
-> tampered mirrors) — **not** against a compromised release. The
-> strongly-verified paths are the Linux packages and `install.sh` with
-> `minisign` present. To make a missing `minisign` a hard error instead of a
-> warning:
+To accept checksum-only integrity when you cannot run `minisign` — this protects
+against corruption/MITM/tampered mirrors but **not** against a compromised
+release:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/rtxnik/lazyray/main/scripts/install.sh \
-  | sh -s -- --require-signature
+  | sh -s -- --allow-unsigned
 ```
+
+> **Trust model:** the strongest path is a **verified** download (minisign or
+> `gh attestation verify`), which covers packages too. A bare `curl … | sh` now
+> fails closed without `minisign`; `--allow-unsigned` downgrades to checksum-only.
+> A signature that is present but invalid is always fatal.
+
+> **Download-then-inspect / pinning an older version:** you can fetch the script,
+> read it, and run it locally. If you pin `LAZYRAY_VERSION` to an **older**
+> release, fetch `install.sh` from that release's **git tag**, not `main` — the
+> `main` script enforces the current signer set and would refuse an older release
+> that predates a newly-added signer:
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/rtxnik/lazyray/<tag>/scripts/install.sh -o install.sh
+> less install.sh && LAZYRAY_VERSION=<tag> sh install.sh
+> ```
 
 ### go install
 
