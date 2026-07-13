@@ -17,9 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SLSA build-provenance attestation for release artifacts, verifiable with `gh attestation verify <file> --repo rtxnik/lazyray`; releases are now published draft-first, so all assets and the attestation exist before a release becomes public.
 
 ### Changed
-- `scripts/install.sh` now verifies `checksums.txt.minisig` against the same
-  embedded trust-list of signing keys, accepting the download when any trusted
-  key verifies it.
+- `scripts/install.sh` now verifies the release signature by **default** and
+  refuses to install without one (`--allow-unsigned` opts down to checksum-only);
+  the embedded trust-list is a **required-signer** set (every listed key must
+  verify, mirroring the runtime update path) rather than accept-any.
 - Attestation verification (docs and the post-release verify job) now pins the
   signer workflow (`gh attestation verify --signer-workflow`), rejecting a
   provenance statement minted by any workflow other than the release pipeline.
@@ -118,6 +119,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   host key refuses to connect until explicitly re-trusted. The ssh destination
   is also passed after `--` and SSH user/host values starting with `-` are
   rejected, closing an argument-injection vector.
+
+### Security
+- The `curl | sh` install path is now **fail-closed on signature**: a bare
+  one-liner without `minisign` (or with a missing/invalid required signature)
+  refuses to install instead of silently degrading to checksum-only. Installation
+  docs now lead with independent verification (`minisign` / `gh attestation
+  verify`, which cover the Linux packages too) and no longer imply that a manual
+  package download is signature-checked on its own.
 
 ## [1.0.0] - 2026-07-02
 
