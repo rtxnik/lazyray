@@ -15,7 +15,7 @@ import (
 )
 
 // newEphemeralKey returns a fresh minisign keypair and the public key as text,
-// so tests never depend on the embedded releaseSigningPubKey var.
+// so tests never depend on the embedded requiredSigners var.
 func newEphemeralKey(t *testing.T) (minisign.PublicKey, minisign.PrivateKey, string) {
 	t.Helper()
 	pub, priv, err := minisign.GenerateKey(rand.Reader)
@@ -44,6 +44,25 @@ func writeArchive(t *testing.T, content []byte) string {
 func checksumsLine(content []byte, name string) string {
 	sum := sha256.Sum256(content)
 	return fmt.Sprintf("%s  %s\n", hex.EncodeToString(sum[:]), name)
+}
+
+// mkSigner generates a fresh minisign keypair and a signer entry pointing at a
+// sig-asset name derived from the key's ID, so parallel signers in the same
+// test never collide on asset name (the marshaled text's leading bytes are a
+// constant "untrusted comment: " header shared by every key, so slicing into
+// that prefix would always produce the same asset name).
+func mkSigner(t *testing.T) (minisign.PrivateKey, signer, string) {
+	t.Helper()
+	pub, priv, err := minisign.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey() error = %v", err)
+	}
+	pt, err := pub.MarshalText()
+	if err != nil {
+		t.Fatalf("MarshalText() error = %v", err)
+	}
+	asset := fmt.Sprintf("checksums.txt.%x.minisig", pub.ID())
+	return priv, signer{pubKey: string(pt), sigAsset: asset}, asset
 }
 
 func TestVerify(t *testing.T) {
@@ -80,7 +99,9 @@ func TestVerify_BadPublicKey(t *testing.T) {
 }
 
 func TestVerifyRelease(t *testing.T) {
-	_, priv, pubText := newEphemeralKey(t)
+	priv, s, asset := mkSigner(t)
+	restore := SetRequiredSignersForTest([]signer{s})
+	defer restore()
 
 	archiveContent := []byte("pretend tar.gz bytes")
 	archivePath := writeArchive(t, archiveContent)
@@ -111,16 +132,19 @@ func TestVerifyRelease(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := verifyReleaseWithKey(pubText, archivePath, tt.checksums, tt.sig)
+			sigs := map[string][]byte{asset: tt.sig}
+			err := VerifyRelease(archivePath, tt.checksums, sigs)
 			if !errors.Is(err, tt.wantErr) {
-				t.Errorf("verifyReleaseWithKey() error = %v, want %v", err, tt.wantErr)
+				t.Errorf("VerifyRelease() error = %v, want %v", err, tt.wantErr)
 			}
 		})
 	}
 }
 
 func TestVerifyRelease_ChecksumMismatch(t *testing.T) {
-	_, priv, pubText := newEphemeralKey(t)
+	priv, s, asset := mkSigner(t)
+	restore := SetRequiredSignersForTest([]signer{s})
+	defer restore()
 
 	archivePath := writeArchive(t, []byte("real bytes on disk"))
 	archiveName := filepath.Base(archivePath)
@@ -129,14 +153,16 @@ func TestVerifyRelease_ChecksumMismatch(t *testing.T) {
 	checksums := []byte(checksumsLine([]byte("different bytes"), archiveName))
 	sig := minisign.Sign(priv, checksums)
 
-	err := verifyReleaseWithKey(pubText, archivePath, checksums, sig)
+	err := VerifyRelease(archivePath, checksums, map[string][]byte{asset: sig})
 	if !errors.Is(err, ErrChecksumMismatch) {
-		t.Errorf("verifyReleaseWithKey() error = %v, want %v", err, ErrChecksumMismatch)
+		t.Errorf("VerifyRelease() error = %v, want %v", err, ErrChecksumMismatch)
 	}
 }
 
 func TestVerifyRelease_AssetNotFound(t *testing.T) {
-	_, priv, pubText := newEphemeralKey(t)
+	priv, s, asset := mkSigner(t)
+	restore := SetRequiredSignersForTest([]signer{s})
+	defer restore()
 
 	archivePath := writeArchive(t, []byte("bytes"))
 
@@ -144,113 +170,41 @@ func TestVerifyRelease_AssetNotFound(t *testing.T) {
 	checksums := []byte(checksumsLine([]byte("x"), "some_other_artifact.tar.gz"))
 	sig := minisign.Sign(priv, checksums)
 
-	err := verifyReleaseWithKey(pubText, archivePath, checksums, sig)
+	err := VerifyRelease(archivePath, checksums, map[string][]byte{asset: sig})
 	if !errors.Is(err, ErrAssetNotFound) {
-		t.Errorf("verifyReleaseWithKey() error = %v, want %v", err, ErrAssetNotFound)
+		t.Errorf("VerifyRelease() error = %v, want %v", err, ErrAssetNotFound)
 	}
 }
 
-func TestDefaultPublicKey(t *testing.T) {
-	if got := DefaultPublicKey(); got != releaseSigningPubKeys[0] {
-		t.Errorf("DefaultPublicKey() = %q, want %q", got, releaseSigningPubKeys[0])
-	}
-}
+func TestVerifyRelease_TwoOfTwo(t *testing.T) {
+	aPriv, aSigner, aAsset := mkSigner(t)
+	bPriv, bSigner, bAsset := mkSigner(t)
+	restore := SetRequiredSignersForTest([]signer{aSigner, bSigner})
+	defer restore()
 
-// signChecksums builds a goreleaser-style checksums.txt covering archiveName's
-// content plus an unrelated entry, signs it with priv, and returns both.
-func signChecksums(t *testing.T, priv minisign.PrivateKey, archiveContent []byte, archiveName string) (checksums, sig []byte) {
-	t.Helper()
-	checksums = []byte(
-		checksumsLine([]byte("other"), "lazyray_0.9.0_darwin_arm64.tar.gz") +
-			checksumsLine(archiveContent, archiveName),
-	)
-	sig = minisign.Sign(priv, checksums)
-	return checksums, sig
-}
-
-// withTamperedKeyID flips every bit of a .minisig's unauthenticated KeyID hint,
-// leaving the Ed25519 signature bytes intact.
-func withTamperedKeyID(t *testing.T, sig []byte) []byte {
-	t.Helper()
-	var s minisign.Signature
-	if err := s.UnmarshalText(sig); err != nil {
-		t.Fatalf("UnmarshalText() error = %v", err)
-	}
-	s.KeyID ^= 0xFFFFFFFFFFFFFFFF
-	out, err := s.MarshalText()
-	if err != nil {
-		t.Fatalf("MarshalText() error = %v", err)
-	}
-	return out
-}
-
-func TestVerifyRelease_TrustList_ListedKeyAccepted(t *testing.T) {
-	_, _, keyAText := newEphemeralKey(t)
-	_, keyBPriv, keyBText := newEphemeralKey(t)
-
-	content := []byte("pretend tar.gz bytes")
+	content := []byte("archive bytes")
 	archivePath := writeArchive(t, content)
-	checksums, sig := signChecksums(t, keyBPriv, content, filepath.Base(archivePath))
-
-	// Signed by B; B is the SECOND entry in the trust-list -> accepted.
-	if err := verifyReleaseWithKeys([]string{keyAText, keyBText}, archivePath, checksums, sig); err != nil {
-		t.Errorf("verifyReleaseWithKeys() listed second key: error = %v, want nil", err)
+	checksums := []byte(checksumsLine(content, filepath.Base(archivePath)))
+	both := map[string][]byte{aAsset: minisign.Sign(aPriv, checksums), bAsset: minisign.Sign(bPriv, checksums)}
+	if err := VerifyRelease(archivePath, checksums, both); err != nil {
+		t.Fatalf("both signatures present: %v, want nil", err)
+	}
+	only := map[string][]byte{aAsset: both[aAsset]}
+	if err := VerifyRelease(archivePath, checksums, only); err == nil {
+		t.Fatal("accepted a release missing a required signature")
 	}
 }
 
-func TestVerifyRelease_TrustList_UnlistedKeyRejected(t *testing.T) {
-	_, _, keyAText := newEphemeralKey(t)
-	_, keyBPriv, _ := newEphemeralKey(t)
-
-	content := []byte("pretend tar.gz bytes")
+func TestVerifyRelease_ProductionInvariant_NoAcceptAny(t *testing.T) {
+	if len(requiredSigners) == 0 {
+		t.Fatal("shipped requiredSigners is empty")
+	}
+	otherPriv, _, _ := mkSigner(t)
+	content := []byte("archive bytes")
 	archivePath := writeArchive(t, content)
-	checksums, sig := signChecksums(t, keyBPriv, content, filepath.Base(archivePath))
-
-	// Signed by B; the list has only A -> rejected, fail closed.
-	if err := verifyReleaseWithKeys([]string{keyAText}, archivePath, checksums, sig); !errors.Is(err, ErrSignatureInvalid) {
-		t.Errorf("verifyReleaseWithKeys() unlisted key: error = %v, want %v", err, ErrSignatureInvalid)
-	}
-}
-
-func TestVerifyRelease_TrustList_WrongKeyIDHintStillVerifies(t *testing.T) {
-	_, keyAPriv, keyAText := newEphemeralKey(t)
-	_, _, keyBText := newEphemeralKey(t)
-
-	content := []byte("pretend tar.gz bytes")
-	archivePath := writeArchive(t, content)
-	checksums, sig := signChecksums(t, keyAPriv, content, filepath.Base(archivePath))
-
-	// Corrupt the sig's KeyID hint so it matches NO listed key; A actually signed
-	// the Ed25519 content, so the try-all fallback must still accept it.
-	tampered := withTamperedKeyID(t, sig)
-	if err := verifyReleaseWithKeys([]string{keyAText, keyBText}, archivePath, checksums, tampered); err != nil {
-		t.Errorf("verifyReleaseWithKeys() wrong KeyID hint: error = %v, want nil", err)
-	}
-}
-
-func TestVerifyRelease_TrustList_TamperedManifestRejected(t *testing.T) {
-	_, keyAPriv, keyAText := newEphemeralKey(t)
-
-	content := []byte("pretend tar.gz bytes")
-	archivePath := writeArchive(t, content)
-	archiveName := filepath.Base(archivePath)
-	checksums, sig := signChecksums(t, keyAPriv, content, archiveName)
-
-	// Rename the archive entry after signing: the manifest no longer matches its sig.
-	tampered := bytes.Replace(checksums, []byte(archiveName), []byte("renamed.tar.gz"), 1)
-	if err := verifyReleaseWithKeys([]string{keyAText}, archivePath, tampered, sig); !errors.Is(err, ErrSignatureInvalid) {
-		t.Errorf("verifyReleaseWithKeys() tampered manifest: error = %v, want %v", err, ErrSignatureInvalid)
-	}
-}
-
-func TestSetPublicKeysForTest_RoundTrip(t *testing.T) {
-	orig := DefaultPublicKeys()
-	restore := SetPublicKeysForTest([]string{"k1", "k2"})
-	if got := DefaultPublicKeys(); len(got) != 2 || got[0] != "k1" || got[1] != "k2" {
-		t.Fatalf("DefaultPublicKeys() = %v, want [k1 k2]", got)
-	}
-	restore()
-	if got := DefaultPublicKeys(); len(got) != len(orig) || got[0] != orig[0] {
-		t.Fatalf("after restore DefaultPublicKeys() = %v, want %v", got, orig)
+	checksums := []byte(checksumsLine(content, filepath.Base(archivePath)))
+	sigs := map[string][]byte{requiredSigners[0].sigAsset: minisign.Sign(otherPriv, checksums)}
+	if err := VerifyRelease(archivePath, checksums, sigs); err == nil {
+		t.Fatal("shipped verifier accepted a signature from an unlisted key (accept-any regression)")
 	}
 }

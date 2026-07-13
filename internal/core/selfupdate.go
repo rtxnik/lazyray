@@ -55,30 +55,41 @@ func CheckSelfUpdate() (*ReleaseInfo, error) {
 	return &release, nil
 }
 
-// SelfAssetURLs holds the three release-asset URLs needed for a verified
-// self-update: the platform archive and the signed checksum manifest pair.
+// SelfAssetURLs holds the release-asset URLs needed for a verified
+// self-update: the platform archive, the checksum manifest, and every
+// required signer's detached signature over that manifest.
 type SelfAssetURLs struct {
-	AssetName string // archive basename, e.g. lazyray_0.9.0_linux_amd64.tar.gz
-	Archive   string
-	Checksums string
-	Signature string
+	AssetName  string // archive basename, e.g. lazyray_0.9.0_linux_amd64.tar.gz
+	Archive    string
+	Checksums  string
+	Signatures map[string]string // sig-asset name -> URL (every required signer)
 }
 
 // FindSelfAssetURL resolves, from a single /releases/latest payload, the URLs of
-// the current platform's archive plus checksums.txt and checksums.txt.minisig.
-// The archive name is derived from rel.TagName via SelfAssetName. Any missing
-// asset yields release.ErrAssetNotFound (fail closed: no partial update).
+// the current platform's archive, checksums.txt, and every signature asset
+// named by release.RequiredSigAssets(). The archive name is derived from
+// rel.TagName via SelfAssetName. Any missing asset — including any required
+// signer's sig asset — yields release.ErrAssetNotFound (fail closed: no
+// partial update, and no update that a newly-added required signer has not
+// yet co-signed).
 func FindSelfAssetURL(rel *ReleaseInfo) (SelfAssetURLs, error) {
 	want := SelfAssetName(rel.TagName)
-	urls := SelfAssetURLs{AssetName: want}
+	urls := SelfAssetURLs{AssetName: want, Signatures: make(map[string]string)}
+
+	sigAssets := release.RequiredSigAssets()
+	wantSig := make(map[string]bool, len(sigAssets))
+	for _, name := range sigAssets {
+		wantSig[name] = true
+	}
+
 	for _, asset := range rel.Assets {
-		switch asset.Name {
-		case want:
+		switch {
+		case asset.Name == want:
 			urls.Archive = asset.BrowserDownloadURL
-		case "checksums.txt":
+		case asset.Name == "checksums.txt":
 			urls.Checksums = asset.BrowserDownloadURL
-		case "checksums.txt.minisig":
-			urls.Signature = asset.BrowserDownloadURL
+		case wantSig[asset.Name]:
+			urls.Signatures[asset.Name] = asset.BrowserDownloadURL
 		}
 	}
 	if urls.Archive == "" {
@@ -87,8 +98,10 @@ func FindSelfAssetURL(rel *ReleaseInfo) (SelfAssetURLs, error) {
 	if urls.Checksums == "" {
 		return SelfAssetURLs{}, fmt.Errorf("checksums.txt not found in release %s: %w", rel.TagName, release.ErrAssetNotFound)
 	}
-	if urls.Signature == "" {
-		return SelfAssetURLs{}, fmt.Errorf("checksums.txt.minisig not found in release %s: %w", rel.TagName, release.ErrAssetNotFound)
+	for _, name := range sigAssets {
+		if _, ok := urls.Signatures[name]; !ok {
+			return SelfAssetURLs{}, fmt.Errorf("%s not found in release %s: %w", name, rel.TagName, release.ErrAssetNotFound)
+		}
 	}
 	return urls, nil
 }
@@ -155,22 +168,28 @@ func ApplySelfUpdate(urls SelfAssetURLs, execPath string) error {
 	if err != nil {
 		return err
 	}
-	sigPath, err := downloadToTemp(workDir, "checksums-sig-*", urls.Signature)
-	if err != nil {
-		return err
-	}
-
 	checksumsTxt, err := os.ReadFile(checksumsPath)
 	if err != nil {
 		return fmt.Errorf("reading checksums: %w", err)
 	}
-	checksumsSig, err := os.ReadFile(sigPath)
-	if err != nil {
-		return fmt.Errorf("reading signature: %w", err)
+
+	// Download every required signer's detached signature over checksums.txt.
+	sigs := make(map[string][]byte, len(urls.Signatures))
+	for name, sigURL := range urls.Signatures {
+		sigPath, err := downloadToTemp(workDir, "checksums-sig-*", sigURL)
+		if err != nil {
+			return err
+		}
+		sigBytes, err := os.ReadFile(sigPath)
+		if err != nil {
+			return fmt.Errorf("reading signature %s: %w", name, err)
+		}
+		sigs[name] = sigBytes
 	}
 
-	// Verify signature + SHA-256 before extracting or swapping. Fail closed.
-	if err := release.VerifyRelease(archivePath, checksumsTxt, checksumsSig); err != nil {
+	// Verify every required signature + SHA-256 before extracting or swapping.
+	// Fail closed.
+	if err := release.VerifyRelease(archivePath, checksumsTxt, sigs); err != nil {
 		return err
 	}
 
