@@ -746,7 +746,9 @@ func TestPIDFileRoundtrip(t *testing.T) {
 	setTestHome(t, tmpDir)
 	_ = config.EnsureDirs()
 
-	writePIDFile(12345)
+	if err := writePIDFile(12345); err != nil {
+		t.Fatalf("writePIDFile: %v", err)
+	}
 	pid := readPIDFile()
 	if pid != 12345 {
 		t.Errorf("readPIDFile() = %d, want 12345", pid)

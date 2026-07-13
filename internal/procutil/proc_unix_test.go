@@ -1,7 +1,6 @@
-// internal/lifecycle/proc_unix_test.go
 //go:build !windows
 
-package lifecycle
+package procutil
 
 import (
 	"syscall"
@@ -73,7 +72,6 @@ func TestGracefulKill_DiesOnSIGTERM_NoSIGKILL(t *testing.T) {
 func TestGracefulKill_SurvivesSIGTERM_EscalatesToSIGKILL(t *testing.T) {
 	swapClock(t)
 	sent := swapSignals(t)
-	// Alive through the whole SIGTERM window, dies after SIGKILL.
 	sigkilled := false
 	origKill := killSignal
 	killSignal = func(pid int, sig syscall.Signal) error {
@@ -93,5 +91,48 @@ func TestGracefulKill_SurvivesSIGTERM_EscalatesToSIGKILL(t *testing.T) {
 	}
 	if len(*sent) < 2 || (*sent)[0] != syscall.SIGTERM || (*sent)[len(*sent)-1] != syscall.SIGKILL {
 		t.Errorf("signals = %v, want SIGTERM…SIGKILL", *sent)
+	}
+}
+
+func TestGracefulKill_NonLeaderPID_FallsBackToSinglePID(t *testing.T) {
+	swapClock(t)
+	var singleTargets []int
+	origKill := killSignal
+	killSignal = func(pid int, sig syscall.Signal) error {
+		if pid < 0 {
+			return syscall.ESRCH // pid is not a process-group leader
+		}
+		singleTargets = append(singleTargets, pid) // record the single-pid fallback
+		return nil
+	}
+	t.Cleanup(func() { killSignal = origKill })
+	calls := 0
+	orig := processAlive
+	processAlive = func(pid int) bool { calls++; return calls <= 1 } // alive for the guard check, dead on first poll
+	t.Cleanup(func() { processAlive = orig })
+
+	if err := GracefulKill(123, time.Second); err != nil {
+		t.Fatalf("GracefulKill() = %v", err)
+	}
+	if len(singleTargets) != 1 || singleTargets[0] != 123 {
+		t.Errorf("single-pid fallback targets = %v, want [123]", singleTargets)
+	}
+}
+
+func TestAlive_NonPositivePID(t *testing.T) {
+	if Alive(0) || Alive(-1) {
+		t.Error("Alive(<=0) must be false")
+	}
+}
+
+func TestAlive_EPERMCountsAsAlive(t *testing.T) {
+	orig := processAlive
+	t.Cleanup(func() { processAlive = orig })
+	// processAlive is the real probe; here we assert the exported wrapper
+	// forwards it. Substitute to prove the wiring (EPERM handling lives in the
+	// real processAlive body).
+	processAlive = func(pid int) bool { return pid == 4242 }
+	if !Alive(4242) || Alive(4243) {
+		t.Error("Alive must forward to processAlive")
 	}
 }

@@ -22,6 +22,7 @@ import (
 
 	"github.com/rtxnik/lazyray/internal/config"
 	"github.com/rtxnik/lazyray/internal/platform"
+	"github.com/rtxnik/lazyray/internal/procutil"
 )
 
 // xrayReleaseAPIBase is the GitHub releases API prefix for xray-core. The pinned
@@ -430,9 +431,7 @@ func verifyPostUpdate(xrayProc *XrayProcess) error {
 	// Wait for SOCKS5 port to accept connections
 	addr := net.JoinHostPort(settings.Local.Listen, strconv.Itoa(settings.Local.SocksPort))
 	for time.Now().Before(deadline) {
-		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
-		if err == nil {
-			conn.Close()
+		if procutil.Reachable(addr, 2*time.Second) == nil {
 			return nil
 		}
 		time.Sleep(time.Second)

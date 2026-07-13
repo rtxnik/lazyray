@@ -19,6 +19,7 @@ import (
 
 	"github.com/rtxnik/lazyray/internal/config"
 	"github.com/rtxnik/lazyray/internal/platform"
+	"github.com/rtxnik/lazyray/internal/procutil"
 )
 
 // ansiRegex strips ANSI escape sequences from command output.
@@ -93,7 +94,12 @@ func (x *XrayProcess) startLocked() error {
 	}
 
 	x.startedAt = time.Now()
-	writePIDFile(x.cmd.Process.Pid)
+	if err := writePIDFile(x.cmd.Process.Pid); err != nil {
+		_ = x.cmd.Process.Kill()
+		_ = x.cmd.Wait()
+		x.cmd = nil
+		return fmt.Errorf("recording xray pid: %w", err)
+	}
 
 	// Wait briefly and check if process is still alive
 	time.Sleep(500 * time.Millisecond)
@@ -142,7 +148,11 @@ func (x *XrayProcess) StartDetached() (int, error) {
 	}
 
 	pid := cmd.Process.Pid
-	writePIDFile(pid)
+	if err := writePIDFile(pid); err != nil {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait() // reap the just-started child (Release not yet called)
+		return 0, fmt.Errorf("recording xray pid: %w", err)
+	}
 
 	// Release so the child is not reaped when we exit
 	_ = cmd.Process.Release()
@@ -191,12 +201,11 @@ func (x *XrayProcess) stopLocked() error {
 		return fmt.Errorf("xray is not running")
 	}
 
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return fmt.Errorf("finding process %d: %w", pid, err)
-	}
-
-	if err := gracefulKill(proc); err != nil {
+	// Non-child: poll-and-escalate (procutil), not proc.Wait() which cannot
+	// confirm a non-child's death. core cannot import lifecycle's
+	// defaultKillTimeout (cycle), so define the grace window locally.
+	const killTimeout = 5 * time.Second
+	if err := procutil.GracefulKill(pid, killTimeout); err != nil {
 		return fmt.Errorf("killing process %d: %w", pid, err)
 	}
 
@@ -661,8 +670,8 @@ func startFailedError(xrayBin, xrayConfig string) error {
 
 // PID file helpers
 
-func writePIDFile(pid int) {
-	_ = os.WriteFile(config.PIDFilePath(), []byte(strconv.Itoa(pid)), 0644)
+func writePIDFile(pid int) error {
+	return procutil.WritePIDFile(config.PIDFilePath(), []byte(strconv.Itoa(pid)))
 }
 
 func readPIDFile() int {
@@ -692,13 +701,7 @@ func checkPortAvailable(host string, port int) error {
 }
 
 func isPortOpen(host string, port int) bool {
-	addr := net.JoinHostPort(host, strconv.Itoa(port))
-	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
-	if err != nil {
-		return false
-	}
-	conn.Close()
-	return true
+	return procutil.Reachable(net.JoinHostPort(host, strconv.Itoa(port)), 2*time.Second) == nil
 }
 
 // findXrayPID searches for a running xray process and returns its PID.

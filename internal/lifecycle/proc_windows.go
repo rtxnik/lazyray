@@ -3,11 +3,7 @@
 
 package lifecycle
 
-import (
-	"os"
-	"syscall"
-	"time"
-)
+import "syscall"
 
 var (
 	modkernel32  = syscall.NewLazyDLL("kernel32.dll")
@@ -27,17 +23,4 @@ func isProcessAlive(pid int) bool {
 	}
 	_ = syscall.CloseHandle(syscall.Handle(h))
 	return true
-}
-
-// GracefulKill on Windows is a best-effort hard kill (no SIGTERM). Per the
-// design, Windows graceful-stop parity is deferred to a seed.
-func GracefulKill(pid int, _ time.Duration) error {
-	if !isProcessAlive(pid) {
-		return nil
-	}
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return err
-	}
-	return p.Kill()
 }

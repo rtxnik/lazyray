@@ -12,6 +12,7 @@ import (
 
 	"github.com/rtxnik/lazyray/internal/config"
 	"github.com/rtxnik/lazyray/internal/fsutil"
+	"github.com/rtxnik/lazyray/internal/procutil"
 )
 
 // TunnelStatus represents SSH tunnel state.
@@ -35,9 +36,19 @@ type tunnel struct {
 	profile   *config.Profile
 }
 
+// newSSHCmd builds the tunnel command with a detached session so the tunnel
+// survives after the CLI process exits (cross-session recovery). buildSSHArgs
+// produces a plain `ssh -N -L …` with no child-spawning options, so the leader
+// pid is the whole tunnel.
+func newSSHCmd(args []string) *exec.Cmd {
+	cmd := exec.Command("ssh", args...)
+	cmd.SysProcAttr = detachedProcAttr()
+	return cmd
+}
+
 // startSSHProcess launches the tunnel child process. Seam for tests.
 var startSSHProcess = func(args []string) (*exec.Cmd, error) {
-	cmd := exec.Command("ssh", args...)
+	cmd := newSSHCmd(args)
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
@@ -123,7 +134,12 @@ func (tm *TunnelManager) Connect(profile *config.Profile) error {
 	}
 
 	// Persist PID and port for cross-session recovery
-	writeTunnelPID(profile.Name, cmd.Process.Pid, localPort)
+	if err := writeTunnelPID(profile.Name, cmd.Process.Pid, localPort); err != nil {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+		delete(tm.tunnels, profile.Name)
+		return fmt.Errorf("recording tunnel pid: %w", err)
+	}
 
 	return nil
 }
@@ -197,8 +213,8 @@ func (tm *TunnelManager) Status(profiles []config.Profile) []TunnelStatus {
 			status.PID = t.cmd.Process.Pid
 			status.LocalPort = t.localPort
 			status.PanelURL = fmt.Sprintf("https://127.0.0.1:%d%s", t.localPort, p.SSH.Panel.Path)
-		} else if pid, port := readTunnelPIDAndPort(p.Name); pid > 0 && isTunnelProcessAlive(pid) {
-			// Found persistent tunnel from a previous session
+		} else if pid, port := readTunnelPIDAndPort(p.Name); pid > 0 && isTunnelProcessAlive(pid) && IsOurTunnel(pid) {
+			// Found our own persistent tunnel from a previous session
 			status.Connected = true
 			status.PID = pid
 			status.LocalPort = port
@@ -243,10 +259,12 @@ func CloseAllPersistentTunnels() {
 // Tunnel PID file helpers.
 // The PID file stores: line 1 = PID, line 2 = local port.
 
-func writeTunnelPID(name string, pid, localPort int) {
-	_ = config.EnsureDirs()
+func writeTunnelPID(name string, pid, localPort int) error {
+	if err := config.EnsureDirs(); err != nil {
+		return err
+	}
 	data := fmt.Sprintf("%d\n%d", pid, localPort)
-	_ = os.WriteFile(config.TunnelPIDPath(name), []byte(data), 0644)
+	return procutil.WritePIDFile(config.TunnelPIDPath(name), []byte(data))
 }
 
 func readTunnelPID(name string) int {

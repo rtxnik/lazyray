@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rtxnik/lazyray/internal/config"
+	"github.com/rtxnik/lazyray/internal/procutil"
 )
 
 // LivenessStatus is the tri-state outcome of a profile liveness probe.
@@ -80,10 +81,8 @@ func tcpProbe(server config.ServerConfig, timeout time.Duration) LivenessResult 
 	}
 	addr := net.JoinHostPort(server.Address, strconv.Itoa(server.Port))
 	start := time.Now()
-	conn, err := net.DialTimeout("tcp", addr, timeout)
-	if err != nil {
+	if err := procutil.Reachable(addr, timeout); err != nil {
 		return LivenessResult{Status: LivenessFail, Method: "tcp", Err: fmt.Errorf("connection to %s failed: %w", addr, err)}
 	}
-	conn.Close()
 	return LivenessResult{Status: LivenessOK, Method: "tcp", Latency: time.Since(start)}
 }

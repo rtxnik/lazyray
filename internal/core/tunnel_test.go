@@ -94,3 +94,33 @@ func TestCloseAllPersistentTunnels_OurTunnel_Killed(t *testing.T) {
 		t.Error("CloseAllPersistentTunnels should have killed our own tunnel process")
 	}
 }
+
+func TestStatus_ForeignLivePID_NotConnected(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	victim := exec.Command("sleep", "30")
+	if err := victim.Start(); err != nil {
+		t.Fatalf("start victim: %v", err)
+	}
+	t.Cleanup(func() { _ = victim.Process.Kill(); _, _ = victim.Process.Wait() })
+	foreign := victim.Process.Pid
+
+	writeTunnelPIDFile(t, "vps", foreign)
+
+	restore := SetProcessCmdlineForTest(func(int) (string, error) {
+		return "/usr/bin/sleep 30", nil // NOT an ssh -N -L tunnel
+	})
+	t.Cleanup(restore)
+
+	tm := NewTunnelManager()
+	statuses := tm.Status([]config.Profile{{Name: "vps", SSH: config.SSHConfig{Host: "h"}}})
+	if len(statuses) != 1 {
+		t.Fatalf("got %d statuses, want 1", len(statuses))
+	}
+	if statuses[0].Connected {
+		t.Error("Status reported Connected=true for a foreign (non-tunnel) live PID")
+	}
+	if _, err := os.Stat(config.TunnelPIDPath("vps")); !os.IsNotExist(err) {
+		t.Error("Status should remove the stale/foreign tunnel pidfile")
+	}
+}

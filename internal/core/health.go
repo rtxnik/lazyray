@@ -12,6 +12,7 @@ import (
 
 	"github.com/rtxnik/lazyray/internal/config"
 	"github.com/rtxnik/lazyray/internal/platform"
+	"github.com/rtxnik/lazyray/internal/procutil"
 )
 
 const maxIPCheckBytes = 64 * 1024 // exit-IP responses are tiny; cap to avoid unbounded reads
@@ -127,15 +128,13 @@ func checkPort(name, host string, port int, timeout int) CheckResult {
 		t = 3 * time.Second
 	}
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
-	conn, err := net.DialTimeout("tcp", addr, t)
-	if err != nil {
+	if err := procutil.Reachable(addr, t); err != nil {
 		return CheckResult{
 			Name:   name,
 			OK:     false,
 			Detail: fmt.Sprintf("%s not accepting connections", addr),
 		}
 	}
-	conn.Close()
 	return CheckResult{
 		Name:   name,
 		OK:     true,

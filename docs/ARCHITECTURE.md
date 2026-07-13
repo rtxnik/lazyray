@@ -338,6 +338,7 @@ against the live build by `internal/refdocs`.
 graph TD
     config[config]
     fsutil[fsutil]
+    procutil[procutil]
     platform[platform]
     theme[tui/theme]
     notify[tui/notify]
@@ -358,14 +359,17 @@ graph TD
 
     platform --> config
     config --> fsutil
+    procutil --> fsutil
     core --> config
     core --> fsutil
     core --> platform
+    core --> procutil
     core --> release
     lifecycle --> config
     lifecycle --> core
     lifecycle --> fsutil
     lifecycle --> platform
+    lifecycle --> procutil
     status --> config
     status --> core
     status --> lifecycle
