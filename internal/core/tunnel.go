@@ -12,6 +12,7 @@ import (
 
 	"github.com/rtxnik/lazyray/internal/config"
 	"github.com/rtxnik/lazyray/internal/fsutil"
+	"github.com/rtxnik/lazyray/internal/procutil"
 )
 
 // TunnelStatus represents SSH tunnel state.
@@ -123,7 +124,12 @@ func (tm *TunnelManager) Connect(profile *config.Profile) error {
 	}
 
 	// Persist PID and port for cross-session recovery
-	writeTunnelPID(profile.Name, cmd.Process.Pid, localPort)
+	if err := writeTunnelPID(profile.Name, cmd.Process.Pid, localPort); err != nil {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+		delete(tm.tunnels, profile.Name)
+		return fmt.Errorf("recording tunnel pid: %w", err)
+	}
 
 	return nil
 }
@@ -243,10 +249,12 @@ func CloseAllPersistentTunnels() {
 // Tunnel PID file helpers.
 // The PID file stores: line 1 = PID, line 2 = local port.
 
-func writeTunnelPID(name string, pid, localPort int) {
-	_ = config.EnsureDirs()
+func writeTunnelPID(name string, pid, localPort int) error {
+	if err := config.EnsureDirs(); err != nil {
+		return err
+	}
 	data := fmt.Sprintf("%d\n%d", pid, localPort)
-	_ = os.WriteFile(config.TunnelPIDPath(name), []byte(data), 0644)
+	return procutil.WritePIDFile(config.TunnelPIDPath(name), []byte(data))
 }
 
 func readTunnelPID(name string) int {

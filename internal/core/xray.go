@@ -94,7 +94,12 @@ func (x *XrayProcess) startLocked() error {
 	}
 
 	x.startedAt = time.Now()
-	writePIDFile(x.cmd.Process.Pid)
+	if err := writePIDFile(x.cmd.Process.Pid); err != nil {
+		_ = x.cmd.Process.Kill()
+		_ = x.cmd.Wait()
+		x.cmd = nil
+		return fmt.Errorf("recording xray pid: %w", err)
+	}
 
 	// Wait briefly and check if process is still alive
 	time.Sleep(500 * time.Millisecond)
@@ -143,7 +148,11 @@ func (x *XrayProcess) StartDetached() (int, error) {
 	}
 
 	pid := cmd.Process.Pid
-	writePIDFile(pid)
+	if err := writePIDFile(pid); err != nil {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait() // reap the just-started child (Release not yet called)
+		return 0, fmt.Errorf("recording xray pid: %w", err)
+	}
 
 	// Release so the child is not reaped when we exit
 	_ = cmd.Process.Release()
@@ -661,8 +670,8 @@ func startFailedError(xrayBin, xrayConfig string) error {
 
 // PID file helpers
 
-func writePIDFile(pid int) {
-	_ = os.WriteFile(config.PIDFilePath(), []byte(strconv.Itoa(pid)), 0644)
+func writePIDFile(pid int) error {
+	return procutil.WritePIDFile(config.PIDFilePath(), []byte(strconv.Itoa(pid)))
 }
 
 func readPIDFile() int {

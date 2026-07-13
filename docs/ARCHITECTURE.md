@@ -359,6 +359,7 @@ graph TD
 
     platform --> config
     config --> fsutil
+    procutil --> fsutil
     core --> config
     core --> fsutil
     core --> platform

@@ -99,7 +99,9 @@ func TestImportSubscription_Integration(t *testing.T) {
 func TestWriteAndReadPIDFile(t *testing.T) {
 	_ = config.EnsureDirs()
 
-	writePIDFile(12345)
+	if err := writePIDFile(12345); err != nil {
+		t.Fatalf("writePIDFile: %v", err)
+	}
 	defer removePIDFile()
 
 	pid := readPIDFile()
@@ -131,7 +133,9 @@ func TestReadPIDFile_InvalidContent(t *testing.T) {
 func TestWriteAndReadTunnelPID(t *testing.T) {
 	_ = config.EnsureDirs()
 
-	writeTunnelPID("test-tunnel-phase6", 1234, 8080)
+	if err := writeTunnelPID("test-tunnel-phase6", 1234, 8080); err != nil {
+		t.Fatalf("writeTunnelPID: %v", err)
+	}
 	defer removeTunnelPID("test-tunnel-phase6")
 
 	pid := readTunnelPID("test-tunnel-phase6")
@@ -563,7 +567,9 @@ func TestTunnelManager_Disconnect_NonExistentWithPIDFile(t *testing.T) {
 	tm := NewTunnelManager()
 
 	// Write a PID file with a non-existent process
-	writeTunnelPID("test-disconnect-phase6", 99999999, 8080)
+	if err := writeTunnelPID("test-disconnect-phase6", 99999999, 8080); err != nil {
+		t.Fatalf("writeTunnelPID: %v", err)
+	}
 	defer removeTunnelPID("test-disconnect-phase6")
 
 	// Should succeed (cleans up PID file)
@@ -611,7 +617,9 @@ func TestTunnelManager_Status_WithStalePIDFile(t *testing.T) {
 	tm := NewTunnelManager()
 
 	// Write a stale PID file (non-existent process)
-	writeTunnelPID("stale-tunnel-phase6", 99999999, 9090)
+	if err := writeTunnelPID("stale-tunnel-phase6", 99999999, 9090); err != nil {
+		t.Fatalf("writeTunnelPID: %v", err)
+	}
 	defer removeTunnelPID("stale-tunnel-phase6")
 
 	profiles := []config.Profile{
@@ -720,7 +728,9 @@ func TestCloseAllPersistentTunnels_NoFiles(t *testing.T) {
 func TestCloseAllPersistentTunnels_WithStaleFile(t *testing.T) {
 	_ = config.EnsureDirs()
 	// Write a stale tunnel PID file
-	writeTunnelPID("test-close-all-phase6", 99999999, 8080)
+	if err := writeTunnelPID("test-close-all-phase6", 99999999, 8080); err != nil {
+		t.Fatalf("writeTunnelPID: %v", err)
+	}
 	defer removeTunnelPID("test-close-all-phase6")
 
 	// Should clean up stale PID files without panicking
