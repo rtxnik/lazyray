@@ -202,6 +202,13 @@ func ApplySelfUpdate(urls SelfAssetURLs, execPath string) error {
 		return fmt.Errorf("setting permissions: %w", err)
 	}
 
+	// Fsync the extracted file before the rename that consumes it, so its
+	// content is durable ahead of the swap.
+	if f, err := os.Open(extracted); err == nil {
+		_ = f.Sync()
+		_ = f.Close()
+	}
+
 	// Atomic same-fs swap with backup/rollback.
 	if err := swapBinary(extracted, execPath); err != nil {
 		return err
@@ -216,29 +223,73 @@ func ApplySelfUpdate(urls SelfAssetURLs, execPath string) error {
 	return nil
 }
 
+// verifyBackupSHA re-hashes the file at path and compares it to want, failing
+// closed if the backup was tampered with (or otherwise changed) in the window
+// between it being written and being read back for a restore.
+func verifyBackupSHA(path, want string) error {
+	got, err := sha256OfFileHex(path)
+	if err != nil {
+		return err
+	}
+	if got != want {
+		return fmt.Errorf("backup %s failed re-verification", filepath.Base(path))
+	}
+	return nil
+}
+
+// restoreVerifiedBackup restores backup -> execPath, but only after re-verifying
+// the backup against wantSHA. If wantSHA is empty (no baseline was captured) the
+// verification is skipped. On a re-verify mismatch it returns an error WITHOUT
+// touching execPath, so a tampered backup can never overwrite the intact original.
+func restoreVerifiedBackup(execPath, backup, wantSHA string) error {
+	if wantSHA != "" {
+		if err := verifyBackupSHA(backup, wantSHA); err != nil {
+			return err
+		}
+	}
+	if err := copyFile(backup, execPath); err != nil {
+		return fmt.Errorf("restoring backup: %w", err)
+	}
+	_ = os.Chmod(execPath, 0o755)
+	_ = os.Remove(backup)
+	return nil
+}
+
 // swapBinary atomically replaces execPath with the already-prepared newPath,
 // keeping a backup so a failed swap can be rolled back. newPath must live on the
 // same filesystem as execPath (the caller stages it under filepath.Dir(execPath))
 // so the rename is atomic. The original is copied — not moved — to a sibling
 // .bak, so execPath stays valid right up to the instant the rename swaps in the
-// new binary. On success the backup is removed; on failure the original is
-// restored and the error returned.
+// new binary. On success the backup is removed; on failure the backup is
+// re-verified against its recorded SHA-256 before being restored, and the
+// error returned.
 func swapBinary(newPath, execPath string) (err error) {
 	backup := execPath + ".bak"
 	_ = os.Remove(backup) // clear any stale backup from a prior interrupted run
+	var backupSHA string
 	if _, statErr := os.Stat(execPath); statErr == nil {
 		if err = copyFile(execPath, backup); err != nil {
 			return fmt.Errorf("backing up current binary: %w", err)
 		}
+		backupSHA, _ = sha256OfFileHex(backup)
 	}
 	if err = os.Rename(newPath, execPath); err != nil {
-		// Roll back from the backup we just made, then drop it.
+		// Roll back from the backup we just made, then drop it — but only
+		// after confirming the backup itself was not tampered with in the
+		// window since it was written.
 		if _, statErr := os.Stat(backup); statErr == nil {
-			_ = copyFile(backup, execPath)
-			_ = os.Chmod(execPath, 0o755)
-			_ = os.Remove(backup)
+			if rErr := restoreVerifiedBackup(execPath, backup, backupSHA); rErr != nil {
+				return fmt.Errorf("swap failed and %v; original left intact: %w", rErr, err)
+			}
 		}
 		return fmt.Errorf("swapping binary: %w", err)
+	}
+	// Fsync the containing directory so the rename's new directory entry is
+	// durable — fsyncing the dir before the rename would not persist the new
+	// name, so this must happen right after the successful rename.
+	if d, err := os.Open(filepath.Dir(execPath)); err == nil {
+		_ = d.Sync()
+		_ = d.Close()
 	}
 	_ = os.Remove(backup) // success: drop the backup
 	return nil

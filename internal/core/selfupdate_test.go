@@ -371,6 +371,66 @@ func TestSwapBinary_RollbackOnFailure(t *testing.T) {
 	}
 }
 
+func TestExtractFromTarGz_SyncsBeforeReturn(t *testing.T) {
+	src, err := os.ReadFile("selfupdate_extract.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(src), "out.Sync()") {
+		t.Fatal("extractFromTarGz does not fsync the extracted file before returning")
+	}
+}
+
+func TestVerifyBackupSHA_RejectsTampered(t *testing.T) {
+	dir := t.TempDir()
+	backup := filepath.Join(dir, "lzr.bak")
+	_ = os.WriteFile(backup, []byte("live-binary"), 0o755)
+	sum, _ := sha256OfFileHex(backup)
+	_ = os.WriteFile(backup, []byte("TAMPERED"), 0o755)
+	if err := verifyBackupSHA(backup, sum); err == nil {
+		t.Fatal("verifyBackupSHA accepted a tampered .bak")
+	}
+	// A matching backup passes.
+	_ = os.WriteFile(backup, []byte("live-binary"), 0o755)
+	if err := verifyBackupSHA(backup, sum); err != nil {
+		t.Fatalf("verifyBackupSHA rejected an untampered .bak: %v", err)
+	}
+}
+
+func TestRestoreVerifiedBackup(t *testing.T) {
+	dir := t.TempDir()
+	exec := filepath.Join(dir, "lzr")
+	backup := exec + ".bak"
+	if err := os.WriteFile(exec, []byte("intact-original"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(backup, []byte("good-backup"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sum, _ := sha256OfFileHex(backup)
+	// Tampered backup -> error, execPath left intact.
+	if err := os.WriteFile(backup, []byte("TAMPERED"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := restoreVerifiedBackup(exec, backup, sum); err == nil {
+		t.Fatal("tampered backup accepted")
+	}
+	if got, _ := os.ReadFile(exec); string(got) != "intact-original" {
+		t.Fatal("execPath overwritten despite tampered backup")
+	}
+	// Untampered backup -> restored.
+	if err := os.WriteFile(backup, []byte("good-backup"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sum2, _ := sha256OfFileHex(backup)
+	if err := restoreVerifiedBackup(exec, backup, sum2); err != nil {
+		t.Fatalf("untampered restore failed: %v", err)
+	}
+	if got, _ := os.ReadFile(exec); string(got) != "good-backup" {
+		t.Fatal("execPath not restored from untampered backup")
+	}
+}
+
 func makeZip(t *testing.T, name string, content []byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer

@@ -51,6 +51,9 @@ func extractFromTarGz(tarGzPath, targetName, dest string) error {
 		if _, err := io.CopyN(out, tr, hdr.Size); err != nil && err != io.EOF {
 			return err
 		}
+		if err := out.Sync(); err != nil {
+			return err
+		}
 		return nil
 	}
 
