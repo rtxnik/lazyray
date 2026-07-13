@@ -53,6 +53,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   abandoned, and a shutdown never spawns a doomed process.
 - Starting `lzr start` while a session is already running no longer records a
   spurious startup failure (so `lzr status`/`lzr doctor` stay accurate).
+- SSH tunnel status no longer reports a reused, unrelated process as a live
+  tunnel; a stale tunnel record for a foreign PID is now cleaned up.
+- SSH tunnels are started in a detached session so they survive the CLI exiting,
+  matching the documented cross-session behavior.
+- Runtime PID files are written atomically with owner-only permissions, and a
+  failed PID write is reported instead of being silently ignored.
+- Stopping a previously-detached proxy now confirms termination and escalates to
+  a forced kill instead of falsely reporting success.
 
 ### Security
 - `lzr update apply` now verifies the downloaded xray-core archive against a
