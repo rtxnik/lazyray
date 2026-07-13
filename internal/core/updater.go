@@ -42,6 +42,28 @@ func xrayReleaseAPIURL(version string) string {
 // extracted or executed.
 var ErrXrayChecksumMismatch = errors.New("xray-core archive checksum mismatch")
 
+// ErrXrayBelowFloor / ErrXrayDowngrade gate xray installs at the primitive level
+// so every caller (CLI, TUI, future) enforces the same policy.
+var ErrXrayBelowFloor = errors.New("xray-core version below the minimum supported floor")
+var ErrXrayDowngrade = errors.New("refusing to install an older xray-core (downgrade)")
+
+// XrayUpdateAllowed enforces: target >= MinXrayVersion (hard floor, no override);
+// and target not strictly older than the installed version unless allowDowngrade.
+// A fresh/unknown install skips the downgrade comparison but still honors the floor.
+func XrayUpdateAllowed(target, installed string, allowDowngrade bool) error {
+	if compareVersions(target, MinXrayVersion) < 0 {
+		return fmt.Errorf("%w: %s < %s", ErrXrayBelowFloor, target, MinXrayVersion)
+	}
+	switch installed {
+	case "not installed", "unknown", "":
+		return nil
+	}
+	if compareVersions(target, installed) < 0 && !allowDowngrade {
+		return fmt.Errorf("%w: %s < installed %s", ErrXrayDowngrade, target, installed)
+	}
+	return nil
+}
+
 // clearQuarantineFn clears macOS Gatekeeper quarantine on the EXACT path given
 // (never a directory). Overridable in tests. The platform impl is a no-op off
 // darwin, so callers need no build-tag branch.
@@ -211,19 +233,26 @@ func findDgstURL(release *ReleaseInfo) (string, error) {
 }
 
 // ApplyUpdate downloads and installs a new xray binary. Before extracting or
-// running anything, it verifies the downloaded archive against the SHA2-256 in
-// the XTLS-published .dgst checksum file from the same release (fail closed:
-// ErrXrayChecksumMismatch). After restarting, it runs a minimal health check
-// (process + port). If the check fails, it rolls back to the backup binary and
-// notifies the user.
-func ApplyUpdate(xrayProc *XrayProcess, release *ReleaseInfo, downloadURL string, backup bool, allowUnverified bool) error {
+// running anything, it verifies the downloaded archive against the embedded,
+// lazyray-signed pin for the release (fail closed: ErrXrayChecksumMismatch);
+// the XTLS-published .dgst checksum path is used only under
+// --allow-unverified-xray, which is a corruption check, not a security
+// guarantee. After restarting, it runs a minimal health check (process + port).
+// If the check fails, it rolls back to the backup binary and notifies the user.
+func ApplyUpdate(xrayProc *XrayProcess, release *ReleaseInfo, downloadURL string, backup bool, allowUnverified bool, allowDowngrade bool) error {
 	if err := config.EnsureDirs(); err != nil {
+		return err
+	}
+	if err := XrayUpdateAllowed(release.TagName, GetXrayVersion(), allowDowngrade); err != nil {
 		return err
 	}
 
 	xrayBin := config.XrayBinaryPath()
 	destDir := filepath.Dir(xrayBin)
 	if err := assertNotWorldWritable(config.BackupDir()); err != nil {
+		fmt.Fprintln(os.Stderr, "WARNING:", err)
+	}
+	if err := assertNotWorldWritable(destDir); err != nil {
 		fmt.Fprintln(os.Stderr, "WARNING:", err)
 	}
 
@@ -285,12 +314,9 @@ func ApplyUpdate(xrayProc *XrayProcess, release *ReleaseInfo, downloadURL string
 				continue
 			}
 			bpath := filepath.Join(config.BackupDir(), fmt.Sprintf("%s.%s.bak", name, time.Now().Format("20060102-150405")))
-			if err := copyFile(dst, bpath); err != nil {
-				return fmt.Errorf("creating backup for %s: %w", name, err)
-			}
-			sum, err := sha256OfFileHex(bpath)
+			sum, err := copyFileWithHash(dst, bpath)
 			if err != nil {
-				return fmt.Errorf("hashing backup %s: %w", name, err)
+				return fmt.Errorf("creating backup for %s: %w", name, err)
 			}
 			backups = append(backups, fileBackup{dest: dst, backupPath: bpath, sha: sum})
 		}
@@ -573,4 +599,47 @@ func copyFile(src, dst string) (err error) {
 		return err
 	}
 	return os.Rename(tmpName, dst)
+}
+
+// copyFileWithHash copies src to dst (atomic temp+rename, like copyFile) and
+// returns the lowercase-hex SHA-256 of the exact bytes written, closing the
+// re-read TOCTOU window in backup fingerprinting.
+func copyFileWithHash(src, dst string) (sum string, err error) {
+	in, err := os.Open(src)
+	if err != nil {
+		return "", err
+	}
+	defer in.Close()
+	mode := os.FileMode(0o644)
+	if fi, statErr := in.Stat(); statErr == nil {
+		mode = fi.Mode().Perm()
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(dst), ".tmp-copy-*")
+	if err != nil {
+		return "", err
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		if err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmpName)
+		}
+	}()
+	h := sha256.New()
+	if _, err = io.Copy(io.MultiWriter(tmp, h), in); err != nil {
+		return "", err
+	}
+	if err = tmp.Sync(); err != nil {
+		return "", err
+	}
+	if err = tmp.Chmod(mode); err != nil {
+		return "", err
+	}
+	if err = tmp.Close(); err != nil {
+		return "", err
+	}
+	if err = os.Rename(tmpName, dst); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

@@ -143,7 +143,7 @@ func downloadToTemp(dir, pattern, url string) (string, error) {
 }
 
 // ApplySelfUpdate downloads the platform archive plus the signed checksum
-// manifest, verifies the release with the embedded minisign key BEFORE touching
+// manifest, verifies the release against every required signer BEFORE touching
 // anything, then extracts the lzr binary from the archive and atomically
 // replaces execPath. It fails closed: on any verification or extraction error
 // the live executable is left untouched and all temp files are removed.
@@ -257,14 +257,18 @@ func verifyBackupSHA(path, want string) error {
 }
 
 // restoreVerifiedBackup restores backup -> execPath, but only after re-verifying
-// the backup against wantSHA. If wantSHA is empty (no baseline was captured) the
-// verification is skipped. On a re-verify mismatch it returns an error WITHOUT
-// touching execPath, so a tampered backup can never overwrite the intact original.
+// the backup against wantSHA. An empty wantSHA (no baseline was captured, e.g. a
+// failed hash capture) REFUSES the restore rather than skipping verification, so
+// an attacker cannot force an unchecked restore by making the hash fail; on a
+// rename failure execPath is untouched (POSIX), so refusing is safe. On a
+// re-verify mismatch it likewise returns an error WITHOUT touching execPath, so a
+// tampered backup can never overwrite the intact original.
 func restoreVerifiedBackup(execPath, backup, wantSHA string) error {
-	if wantSHA != "" {
-		if err := verifyBackupSHA(backup, wantSHA); err != nil {
-			return err
-		}
+	if wantSHA == "" {
+		return fmt.Errorf("cannot verify backup %s (no baseline hash captured); refusing to restore", filepath.Base(backup))
+	}
+	if err := verifyBackupSHA(backup, wantSHA); err != nil {
+		return err
 	}
 	if err := copyFile(backup, execPath); err != nil {
 		return fmt.Errorf("restoring backup: %w", err)
@@ -290,6 +294,8 @@ func swapBinary(newPath, execPath string) (err error) {
 		if err = copyFile(execPath, backup); err != nil {
 			return fmt.Errorf("backing up current binary: %w", err)
 		}
+		// A capture failure yields an empty baseline, which restoreVerifiedBackup
+		// treats as a refuse-to-restore rather than an unverified restore.
 		backupSHA, _ = sha256OfFileHex(backup)
 	}
 	if err = os.Rename(newPath, execPath); err != nil {

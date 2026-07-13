@@ -76,7 +76,7 @@ func (m *UpdateModal) applyUpdate() tea.Cmd {
 			return updateApplyMsg{err: err}
 		}
 
-		if err := core.ApplyUpdate(m.xray, m.release, url, m.settings.Update.BackupBefore, false); err != nil {
+		if err := core.ApplyUpdate(m.xray, m.release, url, m.settings.Update.BackupBefore, false, false); err != nil {
 			return updateApplyMsg{err: err}
 		}
 

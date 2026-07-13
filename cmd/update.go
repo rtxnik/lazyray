@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 
@@ -43,21 +44,20 @@ const (
 // version unless allowDowngrade is set. Equal versions are treated as
 // up-to-date, not a downgrade.
 func xrayUpdateDecision(target, installed string, allowDowngrade bool) xrayUpdateGate {
-	if core.CompareVersions(target, core.MinXrayVersion) < 0 {
-		return gateBelowFloor // hard floor, no override
+	if err := core.XrayUpdateAllowed(target, installed, allowDowngrade); err != nil {
+		if errors.Is(err, core.ErrXrayBelowFloor) {
+			return gateBelowFloor
+		}
+		return gateDowngrade
 	}
 	switch installed {
 	case "not installed", "unknown", "":
 		return gateOK
 	}
-	switch cmp := core.CompareVersions(target, installed); {
-	case cmp == 0:
-		return gateUpToDate // idempotent no-op, not a downgrade
-	case cmp < 0 && !allowDowngrade:
-		return gateDowngrade
-	default:
-		return gateOK
+	if core.CompareVersions(target, installed) == 0 {
+		return gateUpToDate
 	}
+	return gateOK
 }
 
 // resolveXrayVersion returns the version tag to act on: the --version override
@@ -140,7 +140,7 @@ var updateApplyCmd = &cobra.Command{
 		fmt.Printf("Downloading xray %s for %s/%s...\n", release.TagName, runtime.GOOS, runtime.GOARCH)
 
 		xray := core.NewXrayProcess()
-		if err := core.ApplyUpdate(xray, release, downloadURL, settings.Update.BackupBefore, updateAllowUnverified); err != nil {
+		if err := core.ApplyUpdate(xray, release, downloadURL, settings.Update.BackupBefore, updateAllowUnverified, updateAllowDowngrade); err != nil {
 			return xrayMissingError(err)
 		}
 

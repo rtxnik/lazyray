@@ -421,6 +421,13 @@ func TestRestoreVerifiedBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	sum, _ := sha256OfFileHex(backup)
+	// Empty baseline (capture failed) -> refuse, execPath left intact.
+	if err := restoreVerifiedBackup(exec, backup, ""); err == nil {
+		t.Fatal("empty wantSHA accepted (should refuse)")
+	}
+	if got, _ := os.ReadFile(exec); string(got) != "intact-original" {
+		t.Fatal("execPath overwritten despite empty baseline hash")
+	}
 	// Tampered backup -> error, execPath left intact.
 	if err := os.WriteFile(backup, []byte("TAMPERED"), 0o755); err != nil {
 		t.Fatal(err)

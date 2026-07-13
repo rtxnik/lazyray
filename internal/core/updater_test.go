@@ -284,3 +284,33 @@ func TestVerifyXrayChecksum(t *testing.T) {
 		})
 	}
 }
+
+func TestXrayUpdateAllowed(t *testing.T) {
+	tests := []struct {
+		name           string
+		target         string
+		installed      string
+		allowDowngrade bool
+		wantErr        error
+	}{
+		{"below floor", "v1.0.0", "not installed", false, ErrXrayBelowFloor},
+		{"equal", "v26.3.27", "v26.3.27", false, nil},
+		{"older is downgrade", "v26.3.26", "v26.3.27", false, ErrXrayDowngrade},
+		{"older with override", "v26.3.26", "v26.3.27", true, nil},
+		{"fresh at floor", "v26.3.27", "not installed", false, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := XrayUpdateAllowed(tt.target, tt.installed, tt.allowDowngrade)
+			if tt.wantErr == nil {
+				if err != nil {
+					t.Fatalf("XrayUpdateAllowed() unexpected error: %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("XrayUpdateAllowed() error = %v, want errors.Is %v", err, tt.wantErr)
+			}
+		})
+	}
+}
