@@ -22,6 +22,44 @@ var updateCmd = &cobra.Command{
 // Empty means "use settings.Update.XrayVersion".
 var updateXrayVersion string
 
+var (
+	updateAllowDowngrade  bool
+	updateAllowUnverified bool
+)
+
+// xrayUpdateGate is the outcome of comparing a target xray-core release
+// against the installed version and the hard version floor.
+type xrayUpdateGate int
+
+const (
+	gateOK xrayUpdateGate = iota
+	gateBelowFloor
+	gateDowngrade
+	gateUpToDate
+)
+
+// xrayUpdateDecision gates an xray-core update: it enforces the hard minimum
+// version floor (no override) and blocks downgrades from the installed
+// version unless allowDowngrade is set. Equal versions are treated as
+// up-to-date, not a downgrade.
+func xrayUpdateDecision(target, installed string, allowDowngrade bool) xrayUpdateGate {
+	if core.CompareVersions(target, core.MinXrayVersion) < 0 {
+		return gateBelowFloor // hard floor, no override
+	}
+	switch installed {
+	case "not installed", "unknown", "":
+		return gateOK
+	}
+	switch cmp := core.CompareVersions(target, installed); {
+	case cmp == 0:
+		return gateUpToDate // idempotent no-op, not a downgrade
+	case cmp < 0 && !allowDowngrade:
+		return gateDowngrade
+	default:
+		return gateOK
+	}
+}
+
 // resolveXrayVersion returns the version tag to act on: the --version override
 // if set, otherwise the pinned settings.Update.XrayVersion.
 func resolveXrayVersion(override string) string {
@@ -89,10 +127,20 @@ var updateApplyCmd = &cobra.Command{
 			settings = config.DefaultSettings()
 		}
 
+		switch xrayUpdateDecision(release.TagName, core.GetXrayVersion(), updateAllowDowngrade) {
+		case gateUpToDate:
+			fmt.Printf("Already up to date (%s)\n", release.TagName)
+			return nil
+		case gateBelowFloor:
+			return fmt.Errorf("xray %s is below the minimum supported %s; refusing to install", release.TagName, core.MinXrayVersion)
+		case gateDowngrade:
+			return fmt.Errorf("refusing to install xray %s (not newer than installed %s); pass --allow-downgrade to override", release.TagName, core.GetXrayVersion())
+		}
+
 		fmt.Printf("Downloading xray %s for %s/%s...\n", release.TagName, runtime.GOOS, runtime.GOARCH)
 
 		xray := core.NewXrayProcess()
-		if err := core.ApplyUpdate(xray, release, downloadURL, settings.Update.BackupBefore, false); err != nil {
+		if err := core.ApplyUpdate(xray, release, downloadURL, settings.Update.BackupBefore, updateAllowUnverified); err != nil {
 			return xrayMissingError(err)
 		}
 
@@ -111,6 +159,8 @@ func xrayMissingError(err error) error {
 
 func init() {
 	updateApplyCmd.Flags().StringVar(&updateXrayVersion, "version", "", "xray-core release tag to install (overrides settings.update.xrayVersion)")
+	updateApplyCmd.Flags().BoolVar(&updateAllowDowngrade, "allow-downgrade", false, "allow installing an older xray-core than the one installed")
+	updateApplyCmd.Flags().BoolVar(&updateAllowUnverified, "allow-unverified-xray", false, "install without pin verification (checksum-only; NOT a security guarantee)")
 	updateCmd.AddCommand(updateCheckCmd, updateApplyCmd)
 	rootCmd.AddCommand(updateCmd)
 }

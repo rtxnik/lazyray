@@ -20,8 +20,10 @@ lzr update apply [flags]
 ### Options
 
 ```
-  -h, --help             help for apply
-      --version string   xray-core release tag to install (overrides settings.update.xrayVersion)
+      --allow-downgrade         allow installing an older xray-core than the one installed
+      --allow-unverified-xray   install without pin verification (checksum-only; NOT a security guarantee)
+  -h, --help                    help for apply
+      --version string          xray-core release tag to install (overrides settings.update.xrayVersion)
 ```
 
 ### SEE ALSO

@@ -19,7 +19,8 @@ lzr self-update [flags]
 ### Options
 
 ```
-  -h, --help   help for self-update
+      --allow-downgrade   allow installing an older version than the one currently running
+  -h, --help              help for self-update
 ```
 
 ### SEE ALSO
