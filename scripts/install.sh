@@ -78,9 +78,12 @@ need chmod
 
 # A downloader: prefer curl, fall back to wget.
 if command -v curl >/dev/null 2>&1; then
-	DOWNLOAD() { curl -fsSL "$1" -o "$2"; }
+	# Remove the output file on failure: some curl builds (and wget below) leave a
+	# 0-byte/partial file behind on an HTTP error, which the signature path would
+	# otherwise mistake for a present-but-invalid signature.
+	DOWNLOAD() { curl -fsSL "$1" -o "$2" || { rm -f "$2"; return 1; }; }
 elif command -v wget >/dev/null 2>&1; then
-	DOWNLOAD() { wget -q "$1" -O "$2"; }
+	DOWNLOAD() { wget -q "$1" -O "$2" || { rm -f "$2"; return 1; }; }
 else
 	die "need curl or wget to download release assets"
 fi
