@@ -213,3 +213,20 @@ func TestValidateProfile_MultipleErrors(t *testing.T) {
 		t.Errorf("expected at least 3 error parts, got %d: %s", len(parts), err.Error())
 	}
 }
+
+func TestCompareVersions_Exported(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want int
+	}{
+		{"v26.3.27", "v26.3.26", 1},
+		{"26.3.26", "v26.3.27", -1},
+		{"v1.0.0", "1.0.0", 0},
+		{"v26.3.27", "1.8.0", 1},
+	}
+	for _, c := range cases {
+		if got := CompareVersions(c.a, c.b); got != c.want {
+			t.Errorf("CompareVersions(%q,%q)=%d want %d", c.a, c.b, got, c.want)
+		}
+	}
+}

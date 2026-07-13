@@ -37,3 +37,21 @@ func TestSelfUpdateUserMessage(t *testing.T) {
 		})
 	}
 }
+
+func TestSelfUpdateDecision(t *testing.T) {
+	cases := []struct {
+		latest, current string
+		allowDowngrade  bool
+		want            selfUpdateAction
+	}{
+		{"0.9.0", "0.9.0", false, upToDate},
+		{"0.9.1", "0.9.0", false, proceed},
+		{"0.8.0", "0.9.0", false, refuseDowngrade},
+		{"0.8.0", "0.9.0", true, proceed},
+	}
+	for _, c := range cases {
+		if got := selfUpdateDecision(c.latest, c.current, c.allowDowngrade); got != c.want {
+			t.Errorf("selfUpdateDecision(%q,%q,%v)=%v want %v", c.latest, c.current, c.allowDowngrade, got, c.want)
+		}
+	}
+}

@@ -26,9 +26,12 @@ var selfUpdateCmd = &cobra.Command{
 		latest := strings.TrimPrefix(release.TagName, "v")
 		current := strings.TrimPrefix(version, "v")
 
-		if latest == current {
+		switch selfUpdateDecision(latest, current, selfUpdateAllowDowngrade) {
+		case upToDate:
 			fmt.Printf("Already up to date (v%s)\n", current)
 			return nil
+		case refuseDowngrade:
+			return fmt.Errorf("refusing downgrade v%s -> v%s (older than installed); pass --allow-downgrade to override", current, latest)
 		}
 
 		fmt.Printf("Current: v%s → Latest: v%s\n", current, latest)
@@ -53,7 +56,35 @@ var selfUpdateCmd = &cobra.Command{
 	},
 }
 
+// selfUpdateAction is the outcome of comparing the latest release against the
+// currently installed version.
+type selfUpdateAction int
+
+const (
+	upToDate selfUpdateAction = iota
+	proceed
+	refuseDowngrade
+)
+
+// selfUpdateDecision decides whether a self-update should proceed, no-op, or
+// be refused as a downgrade. allowDowngrade overrides the anti-rollback
+// refusal.
+func selfUpdateDecision(latest, current string, allowDowngrade bool) selfUpdateAction {
+	switch cmp := core.CompareVersions(latest, current); {
+	case cmp == 0:
+		return upToDate
+	case cmp < 0 && !allowDowngrade:
+		return refuseDowngrade
+	default:
+		return proceed
+	}
+}
+
+var selfUpdateAllowDowngrade bool
+
 func init() {
+	selfUpdateCmd.Flags().BoolVar(&selfUpdateAllowDowngrade, "allow-downgrade", false,
+		"allow installing an older version than the one currently running")
 	rootCmd.AddCommand(selfUpdateCmd)
 }
 
