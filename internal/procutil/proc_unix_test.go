@@ -94,6 +94,31 @@ func TestGracefulKill_SurvivesSIGTERM_EscalatesToSIGKILL(t *testing.T) {
 	}
 }
 
+func TestGracefulKill_NonLeaderPID_FallsBackToSinglePID(t *testing.T) {
+	swapClock(t)
+	var singleTargets []int
+	origKill := killSignal
+	killSignal = func(pid int, sig syscall.Signal) error {
+		if pid < 0 {
+			return syscall.ESRCH // pid is not a process-group leader
+		}
+		singleTargets = append(singleTargets, pid) // record the single-pid fallback
+		return nil
+	}
+	t.Cleanup(func() { killSignal = origKill })
+	calls := 0
+	orig := processAlive
+	processAlive = func(pid int) bool { calls++; return calls <= 1 } // alive for the guard check, dead on first poll
+	t.Cleanup(func() { processAlive = orig })
+
+	if err := GracefulKill(123, time.Second); err != nil {
+		t.Fatalf("GracefulKill() = %v", err)
+	}
+	if len(singleTargets) != 1 || singleTargets[0] != 123 {
+		t.Errorf("single-pid fallback targets = %v, want [123]", singleTargets)
+	}
+}
+
 func TestAlive_NonPositivePID(t *testing.T) {
 	if Alive(0) || Alive(-1) {
 		t.Error("Alive(<=0) must be false")
