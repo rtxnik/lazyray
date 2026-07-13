@@ -109,9 +109,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   path and covers chained hops, so a share link or export with an out-of-range
   port can no longer persist a broken profile.
 - Release signatures are now verified against an embedded trust-list of signing
-  keys rather than a single key: a release is accepted if any trusted key
-  verifies its signature. The in-binary self-updater is now rotation-ready with
-  no change to the signed-artifact filenames or the download path.
+  keys rather than a single key, and the in-binary self-updater is rotation-ready
+  with no change to the signed-artifact filenames or the download path.
 - SSH tunnels now verify the server host key: first connect requires explicit
   fingerprint confirmation (TUI prompt, CLI prompt, or `lzr tunnel trust`),
   pinned keys are stored in the profile and enforced with
@@ -119,8 +118,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   host key refuses to connect until explicitly re-trusted. The ssh destination
   is also passed after `--` and SSH user/host values starting with `-` are
   rejected, closing an argument-injection vector.
-
-### Security
 - The `curl | sh` install path is now **fail-closed on signature**: a bare
   one-liner without `minisign` (or with a missing/invalid required signature)
   refuses to install instead of silently degrading to checksum-only. Installation
