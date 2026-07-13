@@ -1,27 +1,31 @@
 #!/bin/sh
 # install.sh — POSIX installer for lazyray (lzr).
 #
-# Trust model:
-#   * ALWAYS verifies the archive's SHA-256 against the signed checksums.txt.
-#   * If `minisign` is on PATH, ALSO verifies checksums.txt.minisig against the
-#     embedded trust-list of public keys below (full supply-chain chain of trust).
-#   * If `minisign` is absent, prints a loud WARN + install instructions and
-#     continues at checksum level — UNLESS --require-signature was passed, in
-#     which case the absence is fatal.
-#   * Out-of-band (optional): a published release also carries a keyless SLSA
-#     build-provenance attestation, an INDEPENDENT trust root disjoint from the
-#     minisign key. This installer stays minisign-primary and does NOT require
-#     it; verify separately with:
-#       gh attestation verify <archive> --repo rtxnik/lazyray
+# Trust model (fail-closed by default):
+#   * ALWAYS verifies the archive's SHA-256 against checksums.txt.
+#   * By DEFAULT also REQUIRES a valid minisign signature over checksums.txt
+#     from EVERY required signer (see REQUIRED_SIGNERS) — the required-all model
+#     that mirrors internal/release/verify.go. If minisign is not installed, or a
+#     required signature is missing, the install REFUSES.
+#   * --allow-unsigned downgrades to checksum-only (explicit opt-out) with a loud
+#     warning. A signature that is PRESENT but INVALID is ALWAYS fatal.
+#   * Out-of-band (recommended): every release also carries a keyless SLSA
+#     build-provenance attestation — a trust root disjoint from the minisign key.
+#     Cross-check with:
+#       gh attestation verify <asset> --repo rtxnik/lazyray
 #
-# Honest trade-off: a bare `curl … | sh` without minisign gives only
-# checksum-level protection (corruption / MITM-beyond-TLS / tampered mirror),
-# NOT protection against a compromised release. For the full chain install via
-# Homebrew/nfpm, or run this script on a host that has minisign.
+# The strongest trust comes from VERIFICATION (the minisign-signed checksums.txt
+# enumerates every asset — packages included — and `gh attestation verify`), not
+# from the install method. Prefer `brew install rtxnik/tap/lzr`, or verify a
+# downloaded asset against the signed checksums before using it.
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/rtxnik/lazyray/main/scripts/install.sh | sh
-#   sh install.sh [--require-signature]
+#   sh install.sh [--allow-unsigned]
+#
+# Pinning an OLDER release? Set LAZYRAY_VERSION and fetch THIS script from the
+# matching git tag (…/<tag>/scripts/install.sh), not main — the main script
+# enforces the current signer set and would refuse a release predating a signer.
 #
 # Environment overrides:
 #   LAZYRAY_VERSION       install a specific tag (e.g. v0.9.0) instead of latest
@@ -30,15 +34,17 @@
 
 set -eu
 
-# --- embedded release-signing trust-list -----------------------------------
-# One minisign public key per line. MUST stay byte-in-sync with
-# releaseSigningPubKeys in internal/release/verify.go. The installer accepts the
-# download when ANY listed key verifies checksums.txt.minisig (accept-any).
-RELEASE_PUBKEYS='RWT1X2unwbak2iRSpo1E/k3BWHDjQCzAwgPJft7dtXwRS+3IFxNkR0Ag'
+# --- required release signers ----------------------------------------------
+# EVERY signer listed here MUST produce a valid minisign signature over
+# checksums.txt for the download to be accepted (required-all — mirrors
+# requiredSigners in internal/release/verify.go; defeats single-key compromise).
+# Retire a key by REMOVING its line; activate 2-of-2 by APPENDING a second
+# signer line. Per-line format: "<minisign-public-key> <sig-asset-filename>".
+REQUIRED_SIGNERS='RWT1X2unwbak2iRSpo1E/k3BWHDjQCzAwgPJft7dtXwRS+3IFxNkR0Ag checksums.txt.minisig'
 
 REPO="rtxnik/lazyray"
 PREFIX="${PREFIX:-/usr/local}"
-REQUIRE_SIGNATURE=0
+ALLOW_UNSIGNED=0
 
 # --- output helpers --------------------------------------------------------
 info() { printf '==> %s\n' "$*"; }
@@ -49,9 +55,13 @@ die()  { err "$@"; exit 1; }
 # --- argument parsing ------------------------------------------------------
 while [ $# -gt 0 ]; do
 	case "$1" in
-		--require-signature) REQUIRE_SIGNATURE=1 ;;
+		--allow-unsigned) ALLOW_UNSIGNED=1 ;;
+		--require-signature)
+			# Signature verification is the default now; kept as an accepted
+			# no-op alias so previously-scripted one-liners keep working.
+			info "--require-signature is the default now; flag accepted as a no-op" ;;
 		-h|--help)
-			sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+			sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
 			exit 0
 			;;
 		*) die "unknown argument: $1 (try --help)" ;;
@@ -126,12 +136,6 @@ info "downloading ${archive} (${version})"
 DOWNLOAD "${base}/${archive}"              "${workdir}/${archive}"     || die "failed to download ${archive}"
 DOWNLOAD "${base}/checksums.txt"           "${workdir}/checksums.txt"  || die "failed to download checksums.txt"
 
-# checksums.txt.minisig is optional at download time: only fatal later if --require-signature.
-have_sig=0
-if DOWNLOAD "${base}/checksums.txt.minisig" "${workdir}/checksums.txt.minisig" 2>/dev/null; then
-	have_sig=1
-fi
-
 # --- verify_checksum: always run -------------------------------------------
 # Match the archive's line in checksums.txt, then compare the SHA-256.
 verify_checksum() {
@@ -144,55 +148,94 @@ verify_checksum() {
 	info "checksum OK (sha256 ${actual})"
 }
 
-# verify_signature is only invoked from the conditional block below; shellcheck
-# can't see the dynamic call, so silence the "never invoked" finding here only.
-# shellcheck disable=SC2329
-# --- verify_signature: minisign over checksums.txt -------------------------
-verify_signature() {
-	# Try every embedded trust-list key; accept iff ANY verifies (accept-any).
-	verified=0
-	old_ifs=$IFS
-	IFS='
+# --- download_required_sigs: best-effort fetch of every signer's .minisig -----
+# Downloads whatever sig-assets are available; missing ones are simply absent
+# from the workdir afterwards. Never fatal on its own — presence and validity are
+# judged by verify_present_signatures and the decision block below.
+download_required_sigs() {
+	_oifs=$IFS; IFS='
 '
-	set -f # iterate raw key lines without globbing
-	i=0
-	for key in $RELEASE_PUBKEYS; do
-		[ -n "$key" ] || continue
-		i=$((i + 1))
-		pubfile="${workdir}/lazyray_${i}.pub"
-		printf 'untrusted comment: lazyray release signing key\n%s\n' "$key" > "$pubfile"
-		if minisign -V -p "$pubfile" -m "${workdir}/checksums.txt" >/dev/null 2>&1; then
-			verified=1
-			break
-		fi
+	set -f
+	for _rec in $REQUIRED_SIGNERS; do
+		[ -n "$_rec" ] || continue
+		_asset=${_rec#* }
+		[ "$_asset" != "$_rec" ] || continue   # malformed record (no space) — skip
+		DOWNLOAD "${base}/${_asset}" "${workdir}/${_asset}" 2>/dev/null || :
 	done
 	set +f
-	IFS=$old_ifs
-	[ "$verified" -eq 1 ] \
-		|| die "minisign verification of checksums.txt FAILED against every embedded key — refusing to install"
-	info "minisign signature OK (trust-list key #${i})"
+	IFS=$_oifs
 }
 
+# --- verify_present_signatures: verify every PRESENT required signature -------
+# A present-but-invalid signature is ALWAYS fatal (every mode). Missing sigs are
+# tolerated here; the decision block decides whether a missing one is acceptable.
+# Sets globals: sigs_total (required signers) and sigs_ok (present AND verified).
+verify_present_signatures() {
+	sigs_total=0; sigs_ok=0
+	_oifs=$IFS; IFS='
+'
+	set -f
+	for _rec in $REQUIRED_SIGNERS; do
+		[ -n "$_rec" ] || continue
+		sigs_total=$((sigs_total + 1))
+		_pubkey=${_rec%% *}
+		_asset=${_rec#* }
+		[ -f "${workdir}/${_asset}" ] || continue   # sig not present — tolerated here
+		_pubfile="${workdir}/lazyray_signer_${sigs_total}.pub"
+		printf 'untrusted comment: lazyray release signing key\n%s\n' "$_pubkey" > "$_pubfile"
+		# -x is load-bearing: point minisign at THIS signer's sig-asset. Without
+		# it minisign defaults to checksums.txt.minisig for every signer, so a
+		# second signer would be checked against the first signer's signature.
+		if ! minisign -V -p "$_pubfile" -x "${workdir}/${_asset}" -m "${workdir}/checksums.txt" >/dev/null 2>&1; then
+			set +f; IFS=$_oifs
+			die "minisign verification FAILED for required signer #${sigs_total} (${_asset}) — refusing to install"
+		fi
+		sigs_ok=$((sigs_ok + 1))
+	done
+	set +f
+	IFS=$_oifs
+}
+
+# --- guidance shown when the fail-closed default cannot complete ------------
+fail_closed_guidance() {
+	err "signature verification is required by default but could not be completed."
+	err "Choose a verifiable path:"
+	err "  1. brew install rtxnik/tap/lzr  (or verify checksums.txt.minisig / 'gh attestation verify', then install any asset)"
+	err "  2. install minisign and re-run:  https://jedisct1.github.io/minisign/  (macOS: brew install minisign; Debian/Ubuntu: apt-get install minisign)"
+	err "  3. accept checksum-only integrity (NOT protection against a compromised release):  re-run with --allow-unsigned"
+	err "  4. cross-check out-of-band:  gh attestation verify ${archive} --repo ${REPO}"
+}
+
+# --- signature decision ----------------------------------------------------
 verify_checksum
 
+# A configured-empty signer list is a packaging error, never a valid state
+# (mirrors internal/release/verify.go rejecting an empty requiredSigners). Guard
+# it unconditionally so a botched key-retirement edit fails closed instead of
+# installing an unverified payload.
+[ "$(printf '%s\n' "$REQUIRED_SIGNERS" | grep -c '[^[:space:]]' || :)" -gt 0 ] \
+	|| die "no required signers configured in the installer — refusing to install"
+
+sigs_total=0; sigs_ok=0
 if command -v minisign >/dev/null 2>&1; then
-	if [ "$have_sig" -eq 1 ]; then
-		verify_signature
-	elif [ "$REQUIRE_SIGNATURE" -eq 1 ]; then
-		die "checksums.txt.minisig not available but --require-signature was set"
-	else
-		warn "checksums.txt.minisig not available; installed with checksum-level verification only"
-	fi
+	download_required_sigs
+	verify_present_signatures    # dies on ANY present-but-invalid signature
+fi
+
+if [ "$sigs_total" -gt 0 ] && [ "$sigs_ok" -eq "$sigs_total" ]; then
+	# Every required signer's signature was present and verified — fully trusted,
+	# regardless of --allow-unsigned.
+	info "minisign signature OK (${sigs_ok} required signer(s) verified)"
+elif [ "$ALLOW_UNSIGNED" -eq 1 ]; then
+	# Opt-out: at least one required signature is ABSENT (a present-but-invalid
+	# one would already have been fatal above). Proceed at checksum level.
+	warn "installing with CHECKSUM-ONLY verification (--allow-unsigned)."
+	warn "this protects against corruption / MITM / tampered mirrors, NOT against a compromised release."
+	warn "for the full chain, prefer 'brew install rtxnik/tap/lzr' or 'gh attestation verify ${archive} --repo ${REPO}'."
 else
-	if [ "$REQUIRE_SIGNATURE" -eq 1 ]; then
-		die "--require-signature was set but minisign is not installed. Install it: https://jedisct1.github.io/minisign/"
-	fi
-	warn "minisign not found on PATH — installed with CHECKSUM-LEVEL protection only."
-	warn "This does NOT protect against a compromised release, only corruption / MITM / tampered mirrors."
-	warn "For the full supply-chain chain of trust, install minisign and re-run, or use Homebrew/your distro package:"
-	warn "  macOS:  brew install minisign"
-	warn "  Debian/Ubuntu:  apt-get install minisign"
-	warn "  docs:  https://jedisct1.github.io/minisign/"
+	command -v minisign >/dev/null 2>&1 || err "minisign is not installed, so the required signature could not be verified."
+	fail_closed_guidance
+	exit 1
 fi
 
 # --- extract lzr -----------------------------------------------------------
@@ -218,7 +261,9 @@ if [ -w "$PREFIX" ] || { [ -d "$dest_dir" ] && [ -w "$dest_dir" ]; }; then
 	run_install
 elif command -v sudo >/dev/null 2>&1; then
 	info "installing to ${dest} (requires sudo)"
-	sudo sh -c "mkdir -p '$dest_dir' && cp '${workdir}/lzr' '$dest' && chmod 0755 '$dest'"
+	# Pass paths as positional args, NOT interpolated into the -c string, so a
+	# PREFIX containing shell metacharacters cannot inject a root command.
+	sudo sh -c 'mkdir -p "$1" && cp "$2" "$3" && chmod 0755 "$3"' _ "$dest_dir" "${workdir}/lzr" "$dest"
 else
 	die "cannot write to ${dest_dir} and sudo is not available; set PREFIX to a writable location (e.g. PREFIX=\$HOME/.local)"
 fi
