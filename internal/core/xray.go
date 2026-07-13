@@ -692,13 +692,7 @@ func checkPortAvailable(host string, port int) error {
 }
 
 func isPortOpen(host string, port int) bool {
-	addr := net.JoinHostPort(host, strconv.Itoa(port))
-	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
-	if err != nil {
-		return false
-	}
-	conn.Close()
-	return true
+	return procutil.Reachable(net.JoinHostPort(host, strconv.Itoa(port)), 2*time.Second) == nil
 }
 
 // findXrayPID searches for a running xray process and returns its PID.
