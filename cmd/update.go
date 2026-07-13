@@ -7,7 +7,6 @@ import (
 	"github.com/rtxnik/lazyray/internal/clihint"
 	"github.com/rtxnik/lazyray/internal/config"
 	"github.com/rtxnik/lazyray/internal/core"
-	"github.com/rtxnik/lazyray/internal/platform"
 	"github.com/spf13/cobra"
 )
 
@@ -93,14 +92,8 @@ var updateApplyCmd = &cobra.Command{
 		fmt.Printf("Downloading xray %s for %s/%s...\n", release.TagName, runtime.GOOS, runtime.GOARCH)
 
 		xray := core.NewXrayProcess()
-		if err := core.ApplyUpdate(xray, release, downloadURL, settings.Update.BackupBefore); err != nil {
+		if err := core.ApplyUpdate(xray, release, downloadURL, settings.Update.BackupBefore, false); err != nil {
 			return xrayMissingError(err)
-		}
-
-		// Clear quarantine on macOS
-		if runtime.GOOS == "darwin" {
-			p := platform.Current()
-			_ = p.ClearQuarantine(config.XrayBinaryPath())
 		}
 
 		fmt.Printf("Updated to %s\n", release.TagName)
