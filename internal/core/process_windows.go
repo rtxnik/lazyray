@@ -5,40 +5,24 @@ package core
 import (
 	"os"
 	"syscall"
+
+	"github.com/rtxnik/lazyray/internal/procutil"
 )
 
-var (
-	modkernel32  = syscall.NewLazyDLL("kernel32.dll")
-	procOpenProc = modkernel32.NewProc("OpenProcess")
-)
+// isProcessAlive reports whether a process with the given PID is running.
+// Single source of truth: procutil.Alive (OpenProcess).
+func isProcessAlive(pid int) bool { return procutil.Alive(pid) }
 
-const processQueryLimitedInfo = 0x1000
-
-// isProcessAlive checks whether a process with the given PID is running
-// using the Windows OpenProcess API.
-func isProcessAlive(pid int) bool {
-	h, _, err := procOpenProc.Call(
-		uintptr(processQueryLimitedInfo),
-		0,
-		uintptr(pid),
-	)
-	if h == 0 {
-		_ = err
-		return false
-	}
-	_ = syscall.CloseHandle(syscall.Handle(h))
-	return true
-}
-
-// gracefulKill terminates the process. Windows does not support SIGTERM,
-// so we fall back to Kill() directly.
+// gracefulKill terminates a child process. Windows has no SIGTERM, so this is a
+// direct Kill(); Wait() reaps the child so its handle is freed (parity with the
+// unix child path, which reaps in a goroutine).
 func gracefulKill(proc *os.Process) error {
-	return proc.Kill()
+	err := proc.Kill()
+	_, _ = proc.Wait()
+	return err
 }
 
 // detachedProcAttr returns SysProcAttr for detaching the child process on Windows.
 func detachedProcAttr() *syscall.SysProcAttr {
-	return &syscall.SysProcAttr{
-		CreationFlags: 0x00000008, // CREATE_NO_WINDOW
-	}
+	return &syscall.SysProcAttr{CreationFlags: 0x00000008} // CREATE_NO_WINDOW
 }

@@ -3,9 +3,16 @@
 package core
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
+
+	"github.com/rtxnik/lazyray/internal/config"
 )
 
 func TestStopLocked_ForeignPID_NotKilled(t *testing.T) {
@@ -36,4 +43,67 @@ func TestStopLocked_ForeignPID_NotKilled(t *testing.T) {
 	if !isProcessAlive(foreign) {
 		t.Error("stopLocked killed an unrelated (foreign) process")
 	}
+}
+
+// spawnOrphanIgnoringSIGTERM starts a SIGTERM-ignoring process that is NOT the
+// test's child (it is re-parented via a detached session) and lives in its own
+// process group, then returns its pid. The OLD Wait-based gracefulKill cannot
+// confirm a non-child's death; the new procutil.GracefulKill escalates to a
+// group SIGKILL. t.Cleanup hard-kills it if the test leaves it alive.
+func spawnOrphanIgnoringSIGTERM(t *testing.T) int {
+	t.Helper()
+	pidPath := filepath.Join(t.TempDir(), "victim.pid")
+	// The launcher backgrounds a new-session child that traps SIGTERM, records
+	// its own pid, then execs sleep. The launcher exits immediately, orphaning
+	// the child (re-parented), so this test process is not its parent.
+	launcher := exec.Command("sh", "-c",
+		`setsid sh -c 'trap "" TERM; echo $$ > "`+pidPath+`"; exec sleep 300' >/dev/null 2>&1 &`)
+	if err := launcher.Run(); err != nil {
+		t.Fatalf("launch victim: %v", err)
+	}
+	var pid int
+	for i := 0; i < 200; i++ {
+		if b, err := os.ReadFile(pidPath); err == nil {
+			if p, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil && p > 0 {
+				pid = p
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if pid == 0 {
+		t.Fatal("victim did not report its pid")
+	}
+	t.Cleanup(func() { _ = syscall.Kill(-pid, syscall.SIGKILL); _ = syscall.Kill(pid, syscall.SIGKILL) })
+	return pid
+}
+
+func TestStopLocked_NonChildXray_EscalatesToKill(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	pid := spawnOrphanIgnoringSIGTERM(t)
+
+	origFind := findXrayPID
+	findXrayPID = func() int { return pid }
+	t.Cleanup(func() { findXrayPID = origFind })
+
+	// Make identity treat the victim as our own xray so stopLocked proceeds to kill.
+	restore := SetProcessCmdlineForTest(func(int) (string, error) {
+		return config.XrayBinaryPath() + " run -c cfg", nil
+	})
+	t.Cleanup(restore)
+
+	x := &XrayProcess{} // cmd == nil → pidfile/find (non-child) path
+	if err := x.stopLocked(); err != nil {
+		t.Fatalf("stopLocked() = %v, want nil", err)
+	}
+	// The SIGTERM-ignoring non-child must be dead: proves escalation to SIGKILL
+	// and liveness-confirmed death (the old Wait path returned nil while it lived).
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if !isProcessAlive(pid) {
+			return // GREEN
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Error("stopLocked left a SIGTERM-ignoring non-child xray alive (no SIGKILL escalation)")
 }

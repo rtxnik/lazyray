@@ -362,6 +362,7 @@ graph TD
     core --> config
     core --> fsutil
     core --> platform
+    core --> procutil
     core --> release
     lifecycle --> config
     lifecycle --> core

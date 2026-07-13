@@ -19,6 +19,7 @@ import (
 
 	"github.com/rtxnik/lazyray/internal/config"
 	"github.com/rtxnik/lazyray/internal/platform"
+	"github.com/rtxnik/lazyray/internal/procutil"
 )
 
 // ansiRegex strips ANSI escape sequences from command output.
@@ -191,12 +192,11 @@ func (x *XrayProcess) stopLocked() error {
 		return fmt.Errorf("xray is not running")
 	}
 
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return fmt.Errorf("finding process %d: %w", pid, err)
-	}
-
-	if err := gracefulKill(proc); err != nil {
+	// Non-child: poll-and-escalate (procutil), not proc.Wait() which cannot
+	// confirm a non-child's death. core cannot import lifecycle's
+	// defaultKillTimeout (cycle), so define the grace window locally.
+	const killTimeout = 5 * time.Second
+	if err := procutil.GracefulKill(pid, killTimeout); err != nil {
 		return fmt.Errorf("killing process %d: %w", pid, err)
 	}
 
