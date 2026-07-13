@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/rtxnik/lazyray/internal/config"
 	"github.com/rtxnik/lazyray/internal/core"
-	"github.com/rtxnik/lazyray/internal/platform"
 	"github.com/rtxnik/lazyray/internal/tui/theme"
 )
 
@@ -77,13 +76,8 @@ func (m *UpdateModal) applyUpdate() tea.Cmd {
 			return updateApplyMsg{err: err}
 		}
 
-		if err := core.ApplyUpdate(m.xray, m.release, url, m.settings.Update.BackupBefore); err != nil {
+		if err := core.ApplyUpdate(m.xray, m.release, url, m.settings.Update.BackupBefore, false, false); err != nil {
 			return updateApplyMsg{err: err}
-		}
-
-		if runtime.GOOS == "darwin" {
-			p := platform.Current()
-			_ = p.ClearQuarantine(config.XrayBinaryPath())
 		}
 
 		return updateApplyMsg{}

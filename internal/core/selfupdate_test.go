@@ -133,8 +133,8 @@ func TestFindSelfAssetURL(t *testing.T) {
 		if urls.Checksums != "https://example.com/checksums.txt" {
 			t.Errorf("Checksums = %q", urls.Checksums)
 		}
-		if urls.Signature != "https://example.com/checksums.txt.minisig" {
-			t.Errorf("Signature = %q", urls.Signature)
+		if urls.Signatures["checksums.txt.minisig"] != "https://example.com/checksums.txt.minisig" {
+			t.Errorf("Signatures[checksums.txt.minisig] = %q", urls.Signatures["checksums.txt.minisig"])
 		}
 		if urls.AssetName != archiveName {
 			t.Errorf("AssetName = %q, want %q", urls.AssetName, archiveName)
@@ -170,6 +170,17 @@ func TestFindSelfAssetURL(t *testing.T) {
 	})
 }
 
+func TestFindSelfAssetURL_RequiresAllSigAssets(t *testing.T) {
+	rel := &ReleaseInfo{TagName: "v0.9.0", Assets: []Asset{
+		{Name: "lazyray_0.9.0_" + runtime.GOOS + "_" + runtime.GOARCH + selfArchiveExt(), BrowserDownloadURL: "u/a"},
+		{Name: "checksums.txt", BrowserDownloadURL: "u/c"},
+		// checksums.txt.minisig deliberately ABSENT
+	}}
+	if _, err := FindSelfAssetURL(rel); !errors.Is(err, release.ErrAssetNotFound) {
+		t.Fatalf("missing required sig asset: got %v, want ErrAssetNotFound", err)
+	}
+}
+
 // sha256Hex returns the lowercase hex SHA-256 of b.
 func sha256Hex(b []byte) string {
 	sum := sha256.Sum256(b)
@@ -192,7 +203,7 @@ func newSelfUpdateFixture(t *testing.T, newBinary []byte, mutate func(checksums,
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	restore := release.SetPublicKeyForTest(pub.String())
+	restore := release.SetRequiredSignerForTest(pub.String(), "checksums.txt.minisig")
 	t.Cleanup(restore)
 
 	archiveName := SelfAssetName("v0.9.0")
@@ -236,7 +247,9 @@ func (f *selfUpdateFixture) urls() SelfAssetURLs {
 		AssetName: f.archiveName,
 		Archive:   f.server.URL + "/" + f.archiveName,
 		Checksums: f.server.URL + "/checksums.txt",
-		Signature: f.server.URL + "/checksums.txt.minisig",
+		Signatures: map[string]string{
+			"checksums.txt.minisig": f.server.URL + "/checksums.txt.minisig",
+		},
 	}
 }
 
@@ -368,6 +381,73 @@ func TestSwapBinary_RollbackOnFailure(t *testing.T) {
 	}
 	if _, err := os.Stat(execPath + ".bak"); !os.IsNotExist(err) {
 		t.Errorf("backup left behind after rollback: stat err = %v", err)
+	}
+}
+
+func TestExtractFromTarGz_SyncsBeforeReturn(t *testing.T) {
+	src, err := os.ReadFile("selfupdate_extract.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(src), "out.Sync()") {
+		t.Fatal("extractFromTarGz does not fsync the extracted file before returning")
+	}
+}
+
+func TestVerifyBackupSHA_RejectsTampered(t *testing.T) {
+	dir := t.TempDir()
+	backup := filepath.Join(dir, "lzr.bak")
+	_ = os.WriteFile(backup, []byte("live-binary"), 0o755)
+	sum, _ := sha256OfFileHex(backup)
+	_ = os.WriteFile(backup, []byte("TAMPERED"), 0o755)
+	if err := verifyBackupSHA(backup, sum); err == nil {
+		t.Fatal("verifyBackupSHA accepted a tampered .bak")
+	}
+	// A matching backup passes.
+	_ = os.WriteFile(backup, []byte("live-binary"), 0o755)
+	if err := verifyBackupSHA(backup, sum); err != nil {
+		t.Fatalf("verifyBackupSHA rejected an untampered .bak: %v", err)
+	}
+}
+
+func TestRestoreVerifiedBackup(t *testing.T) {
+	dir := t.TempDir()
+	exec := filepath.Join(dir, "lzr")
+	backup := exec + ".bak"
+	if err := os.WriteFile(exec, []byte("intact-original"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(backup, []byte("good-backup"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sum, _ := sha256OfFileHex(backup)
+	// Empty baseline (capture failed) -> refuse, execPath left intact.
+	if err := restoreVerifiedBackup(exec, backup, ""); err == nil {
+		t.Fatal("empty wantSHA accepted (should refuse)")
+	}
+	if got, _ := os.ReadFile(exec); string(got) != "intact-original" {
+		t.Fatal("execPath overwritten despite empty baseline hash")
+	}
+	// Tampered backup -> error, execPath left intact.
+	if err := os.WriteFile(backup, []byte("TAMPERED"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := restoreVerifiedBackup(exec, backup, sum); err == nil {
+		t.Fatal("tampered backup accepted")
+	}
+	if got, _ := os.ReadFile(exec); string(got) != "intact-original" {
+		t.Fatal("execPath overwritten despite tampered backup")
+	}
+	// Untampered backup -> restored.
+	if err := os.WriteFile(backup, []byte("good-backup"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sum2, _ := sha256OfFileHex(backup)
+	if err := restoreVerifiedBackup(exec, backup, sum2); err != nil {
+		t.Fatalf("untampered restore failed: %v", err)
+	}
+	if got, _ := os.ReadFile(exec); string(got) != "good-backup" {
+		t.Fatal("execPath not restored from untampered backup")
 	}
 }
 

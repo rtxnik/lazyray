@@ -179,7 +179,7 @@ or on `modals`.
 `subscription.go`, `edit.go`, `qr.go`, `update.go`, `activity.go`,
 `confirm.go`, `routing.go`, `diff.go`, `tunnel.go`. (Diagnostics live in the
 **doctor** modal; there is no separate "health" modal.) *Invariant:* depends on
-`config`, `core`, `doctor`, `platform`, `commands`, `notify`, and `theme`, not on
+`config`, `core`, `doctor`, `commands`, `notify`, and `theme`, not on
 the parent `tui`.
 
 ### Service layer
@@ -383,7 +383,6 @@ graph TD
     modals --> config
     modals --> core
     modals --> doctor
-    modals --> platform
     modals --> commands
     modals --> notify
     modals --> theme

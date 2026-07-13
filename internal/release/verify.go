@@ -1,6 +1,7 @@
 // Package release verifies the authenticity and integrity of lazyray release
 // artifacts. It is a pure verifier: it never reaches the network and never calls
-// os.Exit. Trust is rooted in a minisign public key embedded at release time.
+// os.Exit. Trust is rooted in a set of minisign public keys embedded at release
+// time.
 package release
 
 import (
@@ -17,14 +18,20 @@ import (
 	"aead.dev/minisign"
 )
 
-// releaseSigningPubKeys is the ordered, embedded trust-list of minisign public
-// keys the project signs its releases with. VerifyRelease accepts a release when
-// ANY key in this list verifies the signature (accept-any); the list only ever
-// grows on a rotation and a retired key is dropped only on a deliberate call. It
-// is a var (not const) so consumer tests (e.g. self-update) can point the
-// verifier at ephemeral keys via SetPublicKeyForTest / SetPublicKeysForTest.
-var releaseSigningPubKeys = []string{
-	"RWT1X2unwbak2iRSpo1E/k3BWHDjQCzAwgPJft7dtXwRS+3IFxNkR0Ag",
+// signer is one entry in the required-signer trust list: a minisign public key
+// plus the release-asset filename carrying that signer's detached signature
+// over checksums.txt.
+type signer struct {
+	pubKey   string // minisign public-key text
+	sigAsset string // release-asset filename carrying this signer's .minisig
+}
+
+// requiredSigners: EVERY entry must produce a valid signature over checksums.txt
+// for a release to verify (defeats single-key compromise). Retire a key by
+// REMOVING its entry (immediate prune — no accept-any residue). Activate 2-of-2
+// by appending the second, separately-custodied signer.
+var requiredSigners = []signer{
+	{pubKey: "RWT1X2unwbak2iRSpo1E/k3BWHDjQCzAwgPJft7dtXwRS+3IFxNkR0Ag", sigAsset: "checksums.txt.minisig"},
 }
 
 // Typed sentinels returned by Verify and VerifyRelease so callers can branch on
@@ -36,39 +43,36 @@ var (
 	// ErrChecksumMismatch means the archive's computed SHA-256 did not match the
 	// value recorded in the signed checksum manifest.
 	ErrChecksumMismatch = errors.New("release: checksum mismatch")
-	// ErrAssetNotFound means the checksum manifest has no entry for the archive.
+	// ErrAssetNotFound means the checksum manifest has no entry for the archive,
+	// or a release is missing a required signature asset.
 	ErrAssetNotFound = errors.New("release: asset not found in checksum manifest")
 )
 
-// DefaultPublicKey returns the embedded release-signing public key.
-func DefaultPublicKey() string {
-	return releaseSigningPubKeys[0]
-}
-
-// DefaultPublicKeys returns a copy of the embedded release-signing trust-list.
-func DefaultPublicKeys() []string {
-	out := make([]string, len(releaseSigningPubKeys))
-	copy(out, releaseSigningPubKeys)
+// RequiredSigAssets lists the sig-asset names the self-update path must fetch:
+// one per required signer, in requiredSigners order.
+func RequiredSigAssets() []string {
+	out := make([]string, len(requiredSigners))
+	for i, s := range requiredSigners {
+		out[i] = s.sigAsset
+	}
 	return out
 }
 
-// SetPublicKeyForTest temporarily replaces the embedded release-signing key with
-// pubText and returns a restore function that reinstates the previous value.
-// It exists so consumer packages (e.g. self-update) can exercise the production
-// VerifyRelease path against an ephemeral keypair. Not for production use.
-func SetPublicKeyForTest(pubText string) (restore func()) {
-	return SetPublicKeysForTest([]string{pubText})
+// SetRequiredSignersForTest swaps the trust list for tests; returns a restore
+// function that reinstates the previous list. Not for production use.
+func SetRequiredSignersForTest(s []signer) (restore func()) {
+	prev := requiredSigners
+	requiredSigners = append([]signer(nil), s...)
+	return func() { requiredSigners = prev }
 }
 
-// SetPublicKeysForTest temporarily replaces the embedded trust-list with
-// pubTexts and returns a restore function that reinstates the previous list.
-// Not for production use.
-func SetPublicKeysForTest(pubTexts []string) (restore func()) {
-	prev := releaseSigningPubKeys
-	next := make([]string, len(pubTexts))
-	copy(next, pubTexts)
-	releaseSigningPubKeys = next
-	return func() { releaseSigningPubKeys = prev }
+// SetRequiredSignerForTest points VerifyRelease at a single ephemeral signer
+// for the duration of a test. It exists for packages outside release (e.g.
+// self-update) that need to exercise the production verification path against
+// a test keypair but cannot spell the unexported signer type themselves. Not
+// for production use.
+func SetRequiredSignerForTest(pubKey, sigAsset string) (restore func()) {
+	return SetRequiredSignersForTest([]signer{{pubKey: pubKey, sigAsset: sigAsset}})
 }
 
 // Verify checks that sig is a valid minisign signature over msg under the
@@ -86,93 +90,36 @@ func Verify(pubKeyText string, msg, sig []byte) error {
 	return nil
 }
 
-// VerifyRelease performs the full release-artifact check against the embedded
-// public key:
-//  1. verify checksumsSig over checksumsTxt,
-//  2. parse the SHA-256 for filepath.Base(archivePath) from checksumsTxt,
-//  3. compute the SHA-256 of archivePath and compare.
-//
-// Any failed step fails closed with a typed sentinel.
-func VerifyRelease(archivePath string, checksumsTxt, checksumsSig []byte) error {
-	return verifyReleaseWithKeys(DefaultPublicKeys(), archivePath, checksumsTxt, checksumsSig)
-}
-
-// verifyReleaseWithKey is the testable core of VerifyRelease. Tests inject an
-// ephemeral public key here instead of the embedded production key.
-func verifyReleaseWithKey(pubKeyText, archivePath string, checksumsTxt, checksumsSig []byte) error {
-	return verifyReleaseWithKeys([]string{pubKeyText}, archivePath, checksumsTxt, checksumsSig)
-}
-
-// verifyReleaseWithKeys is the testable core of VerifyRelease over a trust-list.
-func verifyReleaseWithKeys(pubKeys []string, archivePath string, checksumsTxt, checksumsSig []byte) error {
-	if err := verifyAnyKey(pubKeys, checksumsTxt, checksumsSig); err != nil {
-		return err
+// VerifyRelease verifies that EVERY required signer produced a valid minisign
+// signature over checksumsTxt (sigs maps sig-asset name -> bytes), then matches
+// the archive SHA-256 against the signed manifest. Fail closed on any missing or
+// invalid required signature.
+func VerifyRelease(archivePath string, checksumsTxt []byte, sigs map[string][]byte) error {
+	if len(requiredSigners) == 0 {
+		return ErrSignatureInvalid
 	}
-
+	for _, s := range requiredSigners {
+		sig, ok := sigs[s.sigAsset]
+		if !ok {
+			return fmt.Errorf("%w: missing required signature %s", ErrAssetNotFound, s.sigAsset)
+		}
+		if err := Verify(s.pubKey, checksumsTxt, sig); err != nil {
+			return err
+		}
+	}
 	name := filepath.Base(archivePath)
 	want, err := checksumForAsset(checksumsTxt, name)
 	if err != nil {
 		return err
 	}
-
 	got, err := sha256OfFile(archivePath)
 	if err != nil {
 		return err
 	}
-
 	if !strings.EqualFold(got, want) {
 		return fmt.Errorf("%w: %s (have %s, want %s)", ErrChecksumMismatch, name, got, want)
 	}
 	return nil
-}
-
-// verifyAnyKey returns nil iff sig is a valid minisign signature over msg under
-// ANY key in pubKeys. The signature's KeyID is used only as an unauthenticated
-// hint to try the matching candidate first; because the KeyID is not covered by
-// the Ed25519 signature, each candidate is re-stamped with its own ID before the
-// full minisign verification, so a genuine signature is never rejected on a
-// mismatched hint. On a miss every remaining key is tried; it accepts iff any
-// verifies and fails closed with ErrSignatureInvalid otherwise (empty list too).
-func verifyAnyKey(pubKeys []string, msg, sig []byte) error {
-	var parsed minisign.Signature
-	if err := parsed.UnmarshalText(sig); err != nil {
-		return ErrSignatureInvalid
-	}
-
-	pubs := make([]minisign.PublicKey, 0, len(pubKeys))
-	for _, text := range pubKeys {
-		var pub minisign.PublicKey
-		if err := pub.UnmarshalText([]byte(text)); err != nil {
-			return fmt.Errorf("release: parsing trust-list public key: %w", err)
-		}
-		pubs = append(pubs, pub)
-	}
-
-	// Try the key whose ID matches the (unauthenticated) hint first, then the rest.
-	order := make([]int, 0, len(pubs))
-	for i := range pubs {
-		if pubs[i].ID() == parsed.KeyID {
-			order = append(order, i)
-		}
-	}
-	for i := range pubs {
-		if pubs[i].ID() != parsed.KeyID {
-			order = append(order, i)
-		}
-	}
-
-	for _, i := range order {
-		candidate := parsed
-		candidate.KeyID = pubs[i].ID()
-		sigText, err := candidate.MarshalText()
-		if err != nil {
-			continue
-		}
-		if minisign.Verify(pubs[i], msg, sigText) {
-			return nil
-		}
-	}
-	return ErrSignatureInvalid
 }
 
 // checksumForAsset returns the lowercase hex SHA-256 recorded for assetName in a

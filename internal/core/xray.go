@@ -831,6 +831,12 @@ func CheckXrayVersionCompat() string {
 	return ""
 }
 
+// CompareVersions compares two semver-like version tags (leading "v" optional).
+// Returns -1 if a < b, 0 if equal, 1 if a > b. Pre-release suffixes and 4th
+// components are ignored; install gating also restricts to pinned tags, so this
+// is sufficient for anti-rollback.
+func CompareVersions(a, b string) int { return compareVersions(a, b) }
+
 // compareVersions compares two semver-like version strings.
 // Returns -1 if a < b, 0 if equal, 1 if a > b.
 func compareVersions(a, b string) int {
