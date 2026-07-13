@@ -46,18 +46,23 @@ func TestStopLocked_ForeignPID_NotKilled(t *testing.T) {
 }
 
 // spawnOrphanIgnoringSIGTERM starts a SIGTERM-ignoring process that is NOT the
-// test's child (it is re-parented via a detached session) and lives in its own
-// process group, then returns its pid. The OLD Wait-based gracefulKill cannot
-// confirm a non-child's death; the new procutil.GracefulKill escalates to a
-// group SIGKILL. t.Cleanup hard-kills it if the test leaves it alive.
+// test's child (a launcher backgrounds it and exits, so it is re-parented to
+// init/launchd) and returns its pid. It uses no `setsid` (absent on macOS), so
+// the process is a non-group-leader — which additionally exercises
+// procutil.GracefulKill's single-pid fallback (kill(-pid) -> ESRCH -> kill(pid)),
+// the exact shape produced by XrayProcess.Start(). The OLD Wait-based
+// gracefulKill could not confirm a non-child's death; the new primitive
+// escalates SIGTERM -> SIGKILL and confirms it. t.Cleanup hard-kills it if the
+// test leaves it alive.
 func spawnOrphanIgnoringSIGTERM(t *testing.T) int {
 	t.Helper()
 	pidPath := filepath.Join(t.TempDir(), "victim.pid")
-	// The launcher backgrounds a new-session child that traps SIGTERM, records
-	// its own pid, then execs sleep. The launcher exits immediately, orphaning
-	// the child (re-parented), so this test process is not its parent.
+	// The launcher backgrounds a child that traps SIGTERM, records its own pid,
+	// then execs sleep, and exits immediately — orphaning the child so this test
+	// process is not its parent. SIG_IGN survives the exec, so the sleep ignores
+	// SIGTERM too.
 	launcher := exec.Command("sh", "-c",
-		`setsid sh -c 'trap "" TERM; echo $$ > "`+pidPath+`"; exec sleep 300' >/dev/null 2>&1 &`)
+		`sh -c 'trap "" TERM; echo $$ > "`+pidPath+`"; exec sleep 300' >/dev/null 2>&1 &`)
 	if err := launcher.Run(); err != nil {
 		t.Fatalf("launch victim: %v", err)
 	}
@@ -74,7 +79,7 @@ func spawnOrphanIgnoringSIGTERM(t *testing.T) int {
 	if pid == 0 {
 		t.Fatal("victim did not report its pid")
 	}
-	t.Cleanup(func() { _ = syscall.Kill(-pid, syscall.SIGKILL); _ = syscall.Kill(pid, syscall.SIGKILL) })
+	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
 	return pid
 }
 
