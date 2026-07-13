@@ -54,6 +54,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   spurious startup failure (so `lzr status`/`lzr doctor` stay accurate).
 
 ### Security
+- `lzr update apply` now verifies the downloaded xray-core archive against a
+  checksum pinned inside the signed lazyray release, instead of a checksum
+  fetched from the same origin as the archive — so a tampered or substituted
+  engine is rejected before it is ever extracted or run. Only versions pinned by
+  this release install by default; `--allow-unverified-xray` opts back into the
+  old same-origin checksum path (a corruption check, explicitly not a security
+  guarantee) with a prominent warning.
+- `lzr self-update` and `lzr update apply` refuse to install a version older
+  than the one already installed unless `--allow-downgrade` is passed, and
+  `lzr update apply` enforces a hard minimum xray-core version floor — closing
+  signed-downgrade attacks that reintroduce a previously patched vulnerability.
+  The version floor is enforced by the updater itself, so every entry point
+  (CLI and TUI) obeys it.
+- A release is now accepted only when every configured signing key verifies it
+  (previously any one trusted key sufficed), so a single compromised signing key
+  can no longer mint an accepted release once a second key is in use.
+- Engine updates now stage the whole file set and roll the entire set back with a
+  re-verified backup if the update fails, macOS quarantine is cleared only on the
+  verified binary (never the whole directory), and self-update writes are flushed
+  to disk before the atomic swap.
 - `lzr config backup` now encrypts archives by default — backups bundle
   proxy credentials, and plaintext archives were previously created
   world-readable. The passphrase comes from `--passphrase-file`, the
