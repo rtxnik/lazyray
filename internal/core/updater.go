@@ -480,7 +480,12 @@ func rollbackUpdate(xrayProc *XrayProcess, backups []fileBackup, xrayBin string,
 }
 
 // assertNotWorldWritable returns an error if dir is group- or world-writable.
+// The POSIX permission bits it inspects are not meaningful on Windows (Stat
+// reports directories as 0o777 regardless of ACLs), so the check is skipped there.
 func assertNotWorldWritable(dir string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
 	fi, err := os.Stat(dir)
 	if err != nil {
 		return nil

@@ -216,6 +216,9 @@ func TestRollbackUpdate_RestoresWholeSet(t *testing.T) {
 }
 
 func TestAssertNotWorldWritable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits are not meaningful on Windows")
+	}
 	dir := t.TempDir()
 	_ = os.Chmod(dir, 0o777)
 	if err := assertNotWorldWritable(dir); err == nil {
