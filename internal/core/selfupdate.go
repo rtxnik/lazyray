@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rtxnik/lazyray/internal/execsafe"
 	"github.com/rtxnik/lazyray/internal/release"
 )
 
@@ -233,10 +234,12 @@ func ApplySelfUpdate(urls SelfAssetURLs, execPath string) error {
 		return err
 	}
 
-	// On macOS, strip the quarantine/extended attributes so Gatekeeper does not
-	// block the freshly written binary. Best-effort: failure is non-fatal.
+	// On macOS, strip the quarantine attribute so Gatekeeper does not block the
+	// freshly written binary. Best-effort: skip on any resolution failure.
 	if runtime.GOOS == "darwin" {
-		_ = exec.Command("xattr", "-cr", execPath).Run()
+		if xattrPath, err := execsafe.SecureLookPath("xattr"); err == nil {
+			_ = exec.Command(xattrPath, "-cr", execPath).Run()
+		}
 	}
 
 	return nil
