@@ -198,7 +198,9 @@ func proxyClient(socksAddr string, timeout time.Duration) (*http.Client, error) 
 // redirect guard. timeout is the whole-request budget.
 func directClient(timeout time.Duration) *http.Client {
 	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
+		// Control-plane fetches must go direct so the pinned-IP guard stays
+		// authoritative; do not honor an ambient HTTP(S)_PROXY here.
+		Proxy: nil,
 		// Wrapped in a closure (not DialContext: dialContext) so the var is read
 		// per-dial: tests that reassign the dialContext seam after directClient
 		// is constructed are still observed. Do not inline this.
