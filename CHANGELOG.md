@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `releases/latest` (used by `scripts/install.sh` and `lzr self-update`) never
   resolves to a rehearsal build.
 
+### Security
+- `lzr export --encrypt` and `lzr import --decrypt` no longer take the passphrase as a flag value; supply it via `--passphrase-file`, the `LAZYRAY_PASSPHRASE` environment variable, or the interactive prompt, so it no longer appears in `ps` or shell history. Import URLs can be read from stdin with `-` (e.g. `lzr import -`, `lzr import --sub -`), and the subscription progress line is redacted to scheme and host.
+
 ### Fixed
 - The post-release verification workflow now triggers off the completed
   `Release` run (plus a manual dispatch fallback): releases published with the

@@ -22,12 +22,13 @@ lzr import [url] [flags]
 ### Options
 
 ```
-      --allow-routing    Honor routing/DNS overrides carried by an encrypted import (validated against an allowlist)
-      --decrypt string   Decrypt encrypted export with password
-  -f, --force            Import even if UUID already exists
-  -h, --help             help for import
-  -n, --name string      Profile name (default: from URL fragment)
-      --sub string       Import from subscription URL
+      --allow-routing            Honor routing/DNS overrides carried by an encrypted import (validated against an allowlist)
+      --decrypt                  Decrypt an encrypted export (passphrase from --passphrase-file, LAZYRAY_PASSPHRASE, or prompt)
+  -f, --force                    Import even if UUID already exists
+  -h, --help                     help for import
+  -n, --name string              Profile name (default: from URL fragment)
+      --passphrase-file string   Read the decryption passphrase from the first line of this file
+      --sub string               Import from subscription URL ('-' reads the URL from stdin)
 ```
 
 ### SEE ALSO

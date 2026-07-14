@@ -241,7 +241,9 @@ func TestImportEncrypted_NoPassword(t *testing.T) {
 	cleanup := setupTestHome(t)
 	defer cleanup()
 
-	importDecrypt = ""
+	importDecrypt = false
+	fakeTerminal(t, false)
+	clearPassphraseEnv(t)
 	err := importEncrypted(importCmd, "LZRENC1:somedata")
 	if err == nil {
 		t.Error("importEncrypted with no password should return error")
@@ -252,9 +254,10 @@ func TestImportEncrypted_InvalidData(t *testing.T) {
 	cleanup := setupTestHome(t)
 	defer cleanup()
 
-	importDecrypt = "mypassword"
+	importDecrypt = true
+	t.Setenv("LAZYRAY_PASSPHRASE", "mypassword")
 	err := importEncrypted(importCmd, "LZRENC1:invaliddata")
-	importDecrypt = ""
+	importDecrypt = false
 	if err == nil {
 		t.Error("importEncrypted with invalid data should return error")
 	}
@@ -277,10 +280,11 @@ func TestImportEncrypted_ValidData(t *testing.T) {
 	servers.Profiles = nil
 	config.SaveServers(servers)
 
-	importDecrypt = "testpass123"
+	importDecrypt = true
+	t.Setenv("LAZYRAY_PASSPHRASE", "testpass123")
 	importForce = true
 	err = importEncrypted(importCmd, encrypted)
-	importDecrypt = ""
+	importDecrypt = false
 	importForce = false
 	if err != nil {
 		t.Fatalf("importEncrypted error: %v", err)
@@ -302,9 +306,10 @@ func TestExportCmd_RunE_Encrypted(t *testing.T) {
 
 	exportAll = false
 	exportQR = false
-	exportEncrypted = "mypassword"
+	exportEncrypt = true
+	t.Setenv("LAZYRAY_PASSPHRASE", "mypassword")
 	err := exportCmd.RunE(exportCmd, []string{})
-	exportEncrypted = ""
+	exportEncrypt = false
 	if err != nil {
 		t.Fatalf("export --encrypt RunE error: %v", err)
 	}
@@ -319,7 +324,7 @@ func TestExportCmd_RunE_QR(t *testing.T) {
 
 	exportAll = false
 	exportQR = true
-	exportEncrypted = ""
+	exportEncrypt = false
 	err := exportCmd.RunE(exportCmd, []string{})
 	exportQR = false
 	if err != nil {
@@ -413,7 +418,7 @@ func TestImportCmd_RunE_VLESS(t *testing.T) {
 	importSub = ""
 	importName = ""
 	importForce = false
-	importDecrypt = ""
+	importDecrypt = false
 
 	url := "vless://test-uuid@1.2.3.4:443?type=tcp&security=none#TestProfile"
 	err := importCmd.RunE(importCmd, []string{url})
@@ -435,9 +440,10 @@ func TestImportCmd_RunE_DecryptNonEncrypted(t *testing.T) {
 	defer cleanup()
 
 	importSub = ""
-	importDecrypt = "password"
+	importDecrypt = true
+	t.Setenv("LAZYRAY_PASSPHRASE", "password")
 	err := importCmd.RunE(importCmd, []string{"vless://test@1.2.3.4:443"})
-	importDecrypt = ""
+	importDecrypt = false
 	if err == nil {
 		t.Error("import --decrypt with non-encrypted data should return error")
 	}

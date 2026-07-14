@@ -17,16 +17,17 @@ lzr export [name] [flags]
   lzr export home
   lzr export --all
   lzr export --qr
-  lzr export --encrypt "passphrase"
+  lzr export --encrypt
 ```
 
 ### Options
 
 ```
-      --all              Export all profiles
-      --encrypt string   Export all profiles encrypted with password
-  -h, --help             help for export
-      --qr               Display proxy URL as QR code in terminal
+      --all                      Export all profiles
+      --encrypt                  Export all profiles encrypted (passphrase from --passphrase-file, LAZYRAY_PASSPHRASE, or prompt)
+  -h, --help                     help for export
+      --passphrase-file string   Read the encryption passphrase from the first line of this file
+      --qr                       Display proxy URL as QR code in terminal
 ```
 
 ### SEE ALSO

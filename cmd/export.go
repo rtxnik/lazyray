@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -11,9 +12,10 @@ import (
 )
 
 var (
-	exportAll       bool
-	exportQR        bool
-	exportEncrypted string
+	exportAll            bool
+	exportQR             bool
+	exportEncrypt        bool
+	exportPassphraseFile string
 )
 
 var exportCmd = &cobra.Command{
@@ -24,9 +26,15 @@ var exportCmd = &cobra.Command{
   lzr export home
   lzr export --all
   lzr export --qr
-  lzr export --encrypt "passphrase"`,
+  lzr export --encrypt`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// The passphrase is never taken from argv; a leftover positional with
+		// --encrypt is a migration error, checked before anything else.
+		if exportEncrypt && len(args) > 0 {
+			return fmt.Errorf("--encrypt no longer takes a value; supply the passphrase with --passphrase-file, the %s env var, or the interactive prompt", passphraseEnvVar)
+		}
+
 		servers, err := config.LoadServers()
 		if err != nil {
 			return fmt.Errorf("loading servers: %w", err)
@@ -36,9 +44,16 @@ var exportCmd = &cobra.Command{
 			return errNoProfilesConfigured()
 		}
 
-		// Encrypted export of all profiles
-		if exportEncrypted != "" {
-			encrypted, err := core.ExportEncrypted(servers.Profiles, exportEncrypted)
+		// Encrypted export of all profiles.
+		if exportEncrypt {
+			pass, err := resolvePassphrase(exportPassphraseFile, true)
+			if errors.Is(err, errNoPassphraseSource) {
+				return fmt.Errorf("no passphrase source: provide --passphrase-file, set %s, or run interactively", passphraseEnvVar)
+			}
+			if err != nil {
+				return err
+			}
+			encrypted, err := core.ExportEncrypted(servers.Profiles, pass)
 			if err != nil {
 				return fmt.Errorf("encrypted export: %w", err)
 			}
@@ -92,6 +107,7 @@ var exportCmd = &cobra.Command{
 func init() {
 	exportCmd.Flags().BoolVar(&exportAll, "all", false, "Export all profiles")
 	exportCmd.Flags().BoolVar(&exportQR, "qr", false, "Display proxy URL as QR code in terminal")
-	exportCmd.Flags().StringVar(&exportEncrypted, "encrypt", "", "Export all profiles encrypted with password")
+	exportCmd.Flags().BoolVar(&exportEncrypt, "encrypt", false, "Export all profiles encrypted (passphrase from --passphrase-file, LAZYRAY_PASSPHRASE, or prompt)")
+	exportCmd.Flags().StringVar(&exportPassphraseFile, "passphrase-file", "", "Read the encryption passphrase from the first line of this file")
 	rootCmd.AddCommand(exportCmd)
 }

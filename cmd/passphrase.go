@@ -1,13 +1,46 @@
 package cmd
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"io"
+	"net/url"
 	"os"
 	"strings"
 
 	"golang.org/x/term"
 )
+
+// readStdinLine reads a single line (up to the first newline) so a secret-bearing
+// URL can be supplied off the command line, keeping it out of ps/proc/argv.
+func readStdinLine(r io.Reader) (string, error) {
+	br := bufio.NewReader(r)
+	line, err := br.ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", err
+	}
+	line = strings.TrimRight(line, "\r\n")
+	if line == "" {
+		return "", fmt.Errorf("no input on stdin")
+	}
+	return line, nil
+}
+
+// redactURL returns a safe-to-echo form of raw. Only http/https reveal the host
+// (their secret lives in the dropped path/query); every other scheme is fully
+// redacted because schemes like vmess://<base64> encode the whole secret in the
+// host position, which must never be echoed.
+func redactURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" {
+		return "(redacted)"
+	}
+	if (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" {
+		return fmt.Sprintf("%s://%s/…", u.Scheme, u.Host)
+	}
+	return fmt.Sprintf("%s://(redacted)", u.Scheme)
+}
 
 // passphraseEnvVar is the non-interactive passphrase source for backup
 // encryption and restore decryption.

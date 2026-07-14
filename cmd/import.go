@@ -3,6 +3,8 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
+	"os"
 
 	"github.com/rtxnik/lazyray/internal/app"
 	"github.com/rtxnik/lazyray/internal/clihint"
@@ -12,11 +14,12 @@ import (
 )
 
 var (
-	importName         string
-	importForce        bool
-	importSub          string
-	importDecrypt      string
-	importAllowRouting bool
+	importName           string
+	importForce          bool
+	importSub            string
+	importDecrypt        bool
+	importPassphraseFile string
+	importAllowRouting   bool
 )
 
 var importCmd = &cobra.Command{
@@ -30,19 +33,35 @@ var importCmd = &cobra.Command{
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if importSub != "" {
-			return importSubscription(cmd, importSub)
+			sub := importSub
+			if sub == "-" {
+				line, err := readStdinLine(os.Stdin)
+				if err != nil {
+					return fmt.Errorf("reading subscription URL from stdin: %w", err)
+				}
+				sub = line
+			}
+			return importSubscription(cmd, sub)
 		}
 
 		if len(args) == 0 {
-			return clihint.Errorf("see usage with 'lzr import --help'", "provide a proxy URL (vless://, vmess://, trojan://, ss://, hysteria2://) or use --sub/--decrypt for import")
+			return clihint.Errorf("see usage with 'lzr import --help'", "provide a proxy URL (vless://, vmess://, trojan://, ss://, hysteria2://), or '-' to read it from stdin, or use --sub/--decrypt")
 		}
 
-		// Check if encrypted import
-		if importDecrypt != "" || core.IsEncryptedExport(args[0]) {
-			return importEncrypted(cmd, args[0])
+		arg := args[0]
+		if arg == "-" {
+			line, err := readStdinLine(os.Stdin)
+			if err != nil {
+				return fmt.Errorf("reading import URL from stdin: %w", err)
+			}
+			arg = line
 		}
 
-		return importSingleProfile(cmd, args[0])
+		if importDecrypt || core.IsEncryptedExport(arg) {
+			return importEncrypted(cmd, arg)
+		}
+
+		return importSingleProfile(cmd, arg)
 	},
 }
 
@@ -107,7 +126,7 @@ func importSubscription(cmd *cobra.Command, subURL string) error {
 		subName = "subscription"
 	}
 
-	fmt.Printf("Fetching subscription: %s\n", subURL)
+	importSubscriptionEcho(os.Stdout, subURL)
 
 	svc := app.NewService()
 	added, updated, err := svc.ImportSubscription(servers, subURL, subName)
@@ -133,10 +152,19 @@ func importSubscription(cmd *cobra.Command, subURL string) error {
 	return nil
 }
 
+// importSubscriptionEcho prints a redacted progress line (a subscription URL can
+// embed an auth token, which must not reach scrollback/logs).
+func importSubscriptionEcho(w io.Writer, subURL string) {
+	fmt.Fprintf(w, "Fetching subscription: %s\n", redactURL(subURL))
+}
+
 func importEncrypted(cmd *cobra.Command, data string) error {
-	password := importDecrypt
-	if password == "" {
-		return clihint.Errorf("supply the password with 'lzr import --decrypt <password> <data>'", "provide password with --decrypt flag for encrypted import")
+	password, err := resolvePassphrase(importPassphraseFile, false)
+	if errors.Is(err, errNoPassphraseSource) {
+		return clihint.Errorf("supply the passphrase with --passphrase-file, LAZYRAY_PASSPHRASE, or interactively", "no passphrase source for encrypted import")
+	}
+	if err != nil {
+		return err
 	}
 
 	profiles, err := core.ImportEncrypted(data, password)
@@ -197,8 +225,9 @@ func importEncrypted(cmd *cobra.Command, data string) error {
 func init() {
 	importCmd.Flags().StringVarP(&importName, "name", "n", "", "Profile name (default: from URL fragment)")
 	importCmd.Flags().BoolVarP(&importForce, "force", "f", false, "Import even if UUID already exists")
-	importCmd.Flags().StringVar(&importSub, "sub", "", "Import from subscription URL")
-	importCmd.Flags().StringVar(&importDecrypt, "decrypt", "", "Decrypt encrypted export with password")
+	importCmd.Flags().StringVar(&importSub, "sub", "", "Import from subscription URL ('-' reads the URL from stdin)")
+	importCmd.Flags().BoolVar(&importDecrypt, "decrypt", false, "Decrypt an encrypted export (passphrase from --passphrase-file, LAZYRAY_PASSPHRASE, or prompt)")
+	importCmd.Flags().StringVar(&importPassphraseFile, "passphrase-file", "", "Read the decryption passphrase from the first line of this file")
 	importCmd.Flags().BoolVar(&importAllowRouting, "allow-routing", false, "Honor routing/DNS overrides carried by an encrypted import (validated against an allowlist)")
 	rootCmd.AddCommand(importCmd)
 }
