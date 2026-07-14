@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/rtxnik/lazyray/internal/app"
@@ -24,8 +25,11 @@ func TestUpdateApply_RoutesThroughService_AndRefusesWhenSupervised(t *testing.T)
 	if !called {
 		t.Error("apply did not route through applyXrayUpdate")
 	}
-	if err == nil {
-		t.Error("supervised refusal must surface as an error")
+	// The supervised refusal must map to a non-zero ExitError, not fall through
+	// to xrayMissingError — covers the errors.Is(ErrSupervisorRunning) branch.
+	var ee *ExitError
+	if !errors.As(err, &ee) || ee.Code != ExitConfig {
+		t.Errorf("supervised refusal = %v, want *ExitError{Code: ExitConfig}", err)
 	}
 }
 

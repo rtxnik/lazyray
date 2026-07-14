@@ -34,6 +34,8 @@ func (s *Service) ApplyXrayUpdate(xray *core.XrayProcess, release *core.ReleaseI
 
 	err = s.applyUpdate(xray, release, downloadURL, settings.Update.BackupBefore, allowUnverified, allowDowngrade)
 	if err == nil && settings.Update.BackupBefore {
+		// MaxFiles bounds whole engine-backup SETS here (each set = the
+		// xray/geoip/geosite .bak sharing one timestamp), not individual files.
 		s.pruneEngineBackups(settings.Backup.MaxFiles)
 	}
 	return err

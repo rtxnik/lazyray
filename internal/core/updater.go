@@ -517,7 +517,10 @@ func assertNotWorldWritable(dir string) error {
 }
 
 func downloadFile(url, dest string) error {
-	return withRetry(3, 2*time.Second, func() error { return downloadFileOnce(url, dest) })
+	if err := withRetry(3, 2*time.Second, func() error { return downloadFileOnce(url, dest) }); err != nil {
+		return fmt.Errorf("download %w", err) // preserve "download failed after N attempts"
+	}
+	return nil
 }
 
 func downloadFileOnce(url, dest string) error {
