@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/rtxnik/lazyray/internal/app"
 	"github.com/rtxnik/lazyray/internal/clihint"
 	"github.com/rtxnik/lazyray/internal/config"
 	"github.com/rtxnik/lazyray/internal/core"
@@ -27,6 +28,12 @@ var (
 	updateAllowDowngrade  bool
 	updateAllowUnverified bool
 )
+
+// applyXrayUpdate is the seam the apply command drives; overridable in tests.
+var applyXrayUpdate = func(xray *core.XrayProcess, release *core.ReleaseInfo, url string,
+	s *config.Settings, allowUnverified, allowDowngrade bool) error {
+	return app.NewService().ApplyXrayUpdate(xray, release, url, s, allowUnverified, allowDowngrade)
+}
 
 // xrayUpdateGate is the outcome of comparing a target xray-core release
 // against the installed version and the hard version floor.
@@ -139,14 +146,27 @@ var updateApplyCmd = &cobra.Command{
 
 		fmt.Printf("Downloading xray %s for %s/%s...\n", release.TagName, runtime.GOOS, runtime.GOARCH)
 
-		xray := core.NewXrayProcess()
-		if err := core.ApplyUpdate(xray, release, downloadURL, settings.Update.BackupBefore, updateAllowUnverified, updateAllowDowngrade); err != nil {
-			return xrayMissingError(err)
+		if err := runUpdateApply(release, downloadURL, settings, updateAllowUnverified, updateAllowDowngrade); err != nil {
+			return err
 		}
 
 		fmt.Printf("Updated to %s\n", release.TagName)
 		return nil
 	},
+}
+
+// runUpdateApply performs the supervisor-aware apply for an already-resolved
+// release/URL. Extracted from RunE so it is testable without the network.
+func runUpdateApply(release *core.ReleaseInfo, downloadURL string, settings *config.Settings,
+	allowUnverified, allowDowngrade bool) error {
+	xray := core.NewXrayProcess()
+	if err := applyXrayUpdate(xray, release, downloadURL, settings, allowUnverified, allowDowngrade); err != nil {
+		if errors.Is(err, app.ErrSupervisorRunning) {
+			return &ExitError{Code: ExitConfig, Err: err}
+		}
+		return xrayMissingError(err)
+	}
+	return nil
 }
 
 // xrayMissingError reports that the pinned xray-core could not be resolved or

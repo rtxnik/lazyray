@@ -71,6 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failed PID write is reported instead of being silently ignored.
 - Stopping a previously-detached proxy now confirms termination and escalates to
   a forced kill instead of falsely reporting success.
+- Update apply now refuses while lazyray is running (stop it first), and no
+  longer risks fighting the background supervisor.
 
 ### Security
 - `lzr update apply` now verifies the downloaded xray-core archive against a

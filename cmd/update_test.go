@@ -1,6 +1,33 @@
 package cmd
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/rtxnik/lazyray/internal/app"
+	"github.com/rtxnik/lazyray/internal/config"
+	"github.com/rtxnik/lazyray/internal/core"
+)
+
+func TestUpdateApply_RoutesThroughService_AndRefusesWhenSupervised(t *testing.T) {
+	orig := applyXrayUpdate
+	t.Cleanup(func() { applyXrayUpdate = orig })
+
+	called := false
+	applyXrayUpdate = func(_ *core.XrayProcess, _ *core.ReleaseInfo, _ string,
+		_ *config.Settings, _, _ bool) error {
+		called = true
+		return app.ErrSupervisorRunning
+	}
+
+	err := runUpdateApply(&core.ReleaseInfo{TagName: "v99.9.9"}, "http://example/x.zip",
+		config.DefaultSettings(), false, false)
+	if !called {
+		t.Error("apply did not route through applyXrayUpdate")
+	}
+	if err == nil {
+		t.Error("supervised refusal must surface as an error")
+	}
+}
 
 func TestXrayUpdateDecision(t *testing.T) {
 	cases := []struct {
