@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestAssetName(t *testing.T) {
@@ -285,6 +286,39 @@ func TestVerifyXrayChecksum(t *testing.T) {
 				t.Fatalf("verifyXrayChecksum() error = %v, want errors.Is %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestWithRetry_SucceedsAfterFailures(t *testing.T) {
+	var n int
+	err := withRetry(3, time.Nanosecond, func() error {
+		n++
+		if n < 3 {
+			return errors.New("boom")
+		}
+		return nil
+	})
+	if err != nil || n != 3 {
+		t.Fatalf("withRetry n=%d err=%v", n, err)
+	}
+}
+
+func TestWithRetry_ExhaustsAndWraps(t *testing.T) {
+	err := withRetry(2, time.Nanosecond, func() error { return errors.New("boom") })
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("withRetry err=%v", err)
+	}
+}
+
+func TestFetchRelease_ErrorTextPreserved(t *testing.T) {
+	// A dead URL yields each caller's own wording via ctxLabel.
+	if _, err := fetchRelease("http://127.0.0.1:0/nope", "updates"); err == nil ||
+		!strings.Contains(err.Error(), "checking for updates:") {
+		t.Fatalf("xray label err=%v", err)
+	}
+	if _, err := fetchRelease("http://127.0.0.1:0/nope", "lazyray updates"); err == nil ||
+		!strings.Contains(err.Error(), "checking for lazyray updates:") {
+		t.Fatalf("self label err=%v", err)
 	}
 }
 

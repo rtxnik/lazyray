@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -37,23 +36,7 @@ func SelfAssetName(version string) string {
 
 // CheckSelfUpdate checks for new lazyray releases.
 func CheckSelfUpdate() (*ReleaseInfo, error) {
-	client := directClient(15 * time.Second)
-	resp, err := safeGet(context.Background(), client, selfUpdateAPIURL, 1<<20)
-	if err != nil {
-		return nil, fmt.Errorf("checking for lazyray updates: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
-	}
-
-	var release ReleaseInfo
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return nil, fmt.Errorf("parsing release info: %w", err)
-	}
-
-	return &release, nil
+	return fetchRelease(selfUpdateAPIURL, "lazyray updates")
 }
 
 // SelfAssetURLs holds the release-asset URLs needed for a verified
@@ -107,9 +90,24 @@ func FindSelfAssetURL(rel *ReleaseInfo) (SelfAssetURLs, error) {
 	return urls, nil
 }
 
-// downloadToTemp safeGets url into a fresh temp file under dir and returns its
-// path. The caller is responsible for removing the returned file.
+// downloadToTemp retries the single-shot download so a transient failure does
+// not abort the whole self-update (matching the xray updater's retry policy).
 func downloadToTemp(dir, pattern, url string) (string, error) {
+	var path string
+	err := withRetry(3, 2*time.Second, func() error {
+		p, e := downloadToTempOnce(dir, pattern, url)
+		if e != nil {
+			return e
+		}
+		path = p
+		return nil
+	})
+	return path, err
+}
+
+// downloadToTempOnce safeGets url into a fresh temp file under dir and returns
+// its path. The caller is responsible for removing the returned file.
+func downloadToTempOnce(dir, pattern, url string) (string, error) {
 	tmp, err := os.CreateTemp(dir, pattern)
 	if err != nil {
 		return "", fmt.Errorf("creating temp file: %w", err)
