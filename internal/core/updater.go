@@ -329,12 +329,13 @@ func ApplyUpdate(xrayProc *XrayProcess, release *ReleaseInfo, downloadURL string
 	// file changes concurrently.
 	var backups []fileBackup
 	if backup {
+		ts := time.Now().Format("20060102-150405") // one token for the whole set
 		for _, name := range filesToExtract {
 			dst := filepath.Join(destDir, name)
 			if _, statErr := os.Stat(dst); statErr != nil {
 				continue
 			}
-			bpath := filepath.Join(config.BackupDir(), fmt.Sprintf("%s.%s.bak", name, time.Now().Format("20060102-150405")))
+			bpath := filepath.Join(config.BackupDir(), fmt.Sprintf("%s.%s.bak", name, ts))
 			sum, err := copyFileWithHash(dst, bpath)
 			if err != nil {
 				return fmt.Errorf("creating backup for %s: %w", name, err)
