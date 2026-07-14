@@ -13,6 +13,9 @@ import (
 	"github.com/rtxnik/lazyray/internal/platform"
 )
 
+// locker is the subset of *lifecycle.Lock the update flow holds across a swap.
+type locker interface{ Release() error }
+
 // Service is the application-service facade. Its seams are function values so
 // tests can substitute fakes; NewService wires the real host implementations.
 type Service struct {
@@ -28,6 +31,11 @@ type Service struct {
 	signalSupervisor func(pid int) error
 	reconcile        func(sp platform.SystemProxy) error
 	currentProxy     func() platform.SystemProxy
+
+	// Update flow.
+	applyUpdate        func(xray *core.XrayProcess, release *core.ReleaseInfo, url string, backup, allowUnverified, allowDowngrade bool) error
+	pruneEngineBackups func(maxSets int)
+	acquireLock        func() (locker, error)
 }
 
 // NewService returns a Service bound to the real config/core/lifecycle/platform
@@ -44,5 +52,15 @@ func NewService() *Service {
 		signalSupervisor: lifecycle.SignalSupervisor,
 		reconcile:        lifecycle.Reconcile,
 		currentProxy:     platform.CurrentSystemProxy,
+
+		applyUpdate:        core.ApplyUpdate,
+		pruneEngineBackups: core.PruneEngineBackups,
+		acquireLock: func() (locker, error) {
+			l, err := lifecycle.AcquireLock()
+			if err != nil {
+				return nil, err
+			}
+			return l, nil
+		},
 	}
 }
