@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `lzr export --encrypt` and `lzr import --decrypt` no longer take the passphrase as a flag value; supply it via `--passphrase-file`, the `LAZYRAY_PASSPHRASE` environment variable, or the interactive prompt, so it no longer appears in `ps` or shell history. Import URLs can be read from stdin with `-` (e.g. `lzr import -`, `lzr import --sub -`), and the subscription progress line is redacted to scheme and host.
 - The updater bounds each extracted archive member against a size cap (decompression-bomb defense) and removes a partially written member on rejection; `lzr config backup` opens its source files with `O_NOFOLLOW`, so a symlinked config path can no longer redirect the backup to off-path data.
 - macOS notification text is escaped before it reaches `osascript` (no AppleScript string breakout), and the `xattr` helper is resolved to a trusted absolute path — refusing a binary reached through a world-writable, non-sticky `PATH` directory — instead of a bare name.
+- The SSH tunnel resolves `ssh` the same secure way (refusing to run one from a world-writable `PATH` entry) and sets `ExitOnForwardFailure=yes`, so a local forward-bind collision makes ssh exit cleanly instead of lingering as a connected-but-dead tunnel.
 
 ### Fixed
 - The post-release verification workflow now triggers off the completed
