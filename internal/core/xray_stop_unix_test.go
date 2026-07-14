@@ -3,6 +3,7 @@
 package core
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -85,30 +86,63 @@ func spawnOrphanIgnoringSIGTERM(t *testing.T) int {
 
 func TestStopLocked_NonChildXray_EscalatesToKill(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	if err := config.EnsureDirs(); err != nil {
+		t.Fatalf("EnsureDirs: %v", err)
+	}
 	pid := spawnOrphanIgnoringSIGTERM(t)
 
-	origFind := findXrayPID
-	findXrayPID = func() int { return pid }
-	t.Cleanup(func() { findXrayPID = origFind })
-
-	// Make identity treat the victim as our own xray so stopLocked proceeds to kill.
+	// Self-record the PID (the path F1 preserves), NOT findXrayPID.
+	if err := writePIDFile(pid); err != nil {
+		t.Fatalf("writePIDFile: %v", err)
+	}
 	restore := SetProcessCmdlineForTest(func(int) (string, error) {
 		return config.XrayBinaryPath() + " run -c cfg", nil
 	})
 	t.Cleanup(restore)
 
-	x := &XrayProcess{} // cmd == nil → pidfile/find (non-child) path
+	x := &XrayProcess{} // cmd == nil → readPIDFile path (non-child)
 	if err := x.stopLocked(); err != nil {
 		t.Fatalf("stopLocked() = %v, want nil", err)
 	}
-	// The SIGTERM-ignoring non-child must be dead: proves escalation to SIGKILL
-	// and liveness-confirmed death (the old Wait path returned nil while it lived).
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		if !isProcessAlive(pid) {
-			return // GREEN
+			return // GREEN: escalated to SIGKILL on the readPIDFile path
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Error("stopLocked left a SIGTERM-ignoring non-child xray alive (no SIGKILL escalation)")
+}
+
+// After F1, a pgrep-discovered xray (no self-recorded PID file) is NOT a kill
+// target: stopLocked must refuse and leave the process alive. RED on pre-F1
+// code (which pgrep-kills it), GREEN after F1.
+func TestStopLocked_PgrepSourced_Refused(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	victim := exec.Command("sleep", "30")
+	if err := victim.Start(); err != nil {
+		t.Fatalf("start victim: %v", err)
+	}
+	t.Cleanup(func() { _ = victim.Process.Kill(); _, _ = victim.Process.Wait() })
+	pid := victim.Process.Pid
+
+	origFind := findXrayPID
+	findXrayPID = func() int { return pid } // pgrep would "find" the victim
+	t.Cleanup(func() { findXrayPID = origFind })
+
+	// Make identity treat the victim as OUR xray, so pre-F1 code proceeds to kill.
+	restore := SetProcessCmdlineForTest(func(int) (string, error) {
+		return config.XrayBinaryPath() + " run -c cfg", nil
+	})
+	t.Cleanup(restore)
+
+	x := &XrayProcess{} // cmd == nil, no PID file written → pgrep fallback path
+	err := x.stopLocked()
+	if !errors.Is(err, errXrayNotOwned) {
+		t.Fatalf("stopLocked() err = %v, want errXrayNotOwned", err)
+	}
+	if !isProcessAlive(pid) {
+		t.Error("stopLocked killed a pgrep-sourced (non-owned) process")
+	}
 }
