@@ -21,6 +21,11 @@ func DefaultEnv() *Env {
 		XrayConfigPath: config.XrayConfigPath(),
 		StatePath:      lifecycle.StatePath(),
 		ServersPath:    config.ServersPath(),
+		SettingsPath:   config.SettingsPath(),
+		StatsPath:      config.StatsPath(),
+		BackupDir:      config.BackupDir(),
+		LogDir:         config.LogDir(),
+		ConfigDir:      config.ConfigDir(),
 
 		GetXrayVersion:           core.GetXrayVersion,
 		CheckXrayVersionCompat:   core.CheckXrayVersionCompat,

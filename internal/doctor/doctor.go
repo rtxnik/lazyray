@@ -85,6 +85,11 @@ type Env struct {
 	XrayConfigPath string
 	StatePath      string
 	ServersPath    string
+	SettingsPath   string
+	StatsPath      string
+	BackupDir      string
+	LogDir         string
+	ConfigDir      string
 
 	// Install / version seams.
 	GetXrayVersion           func() string

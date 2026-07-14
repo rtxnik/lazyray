@@ -3,6 +3,7 @@
 package core
 
 import (
+	"os/exec"
 	"syscall"
 	"testing"
 )
@@ -11,7 +12,13 @@ import (
 // through newSSHCmd (the seam-swap tests replace startSSHProcess and never run
 // the default spawn). No t.Parallel: touches package-level construction only.
 func TestNewSSHCmd_SetsDetachedProcAttr(t *testing.T) {
-	cmd := newSSHCmd([]string{"-N", "user@host"})
+	cmd, err := newSSHCmd([]string{"-N", "user@host"})
+	if err != nil {
+		if _, lookErr := exec.LookPath("ssh"); lookErr != nil {
+			t.Skipf("ssh not installed: %v", lookErr)
+		}
+		t.Fatalf("newSSHCmd failed though ssh is present: %v", err)
+	}
 	if cmd.SysProcAttr == nil {
 		t.Fatal("newSSHCmd did not set SysProcAttr (tunnel would not detach)")
 	}

@@ -518,6 +518,16 @@ func buildVLESSOutbound(tag string, server config.ServerConfig, proxyTag string)
 	return newOutbound(tag, "vless", settings, server, proxyTag)
 }
 
+// accessLogTarget returns the xray access-log destination: the log path only
+// when explicitly enabled, otherwise "none" (privacy default — the access log
+// records browsing destinations).
+func accessLogTarget(settings *config.Settings) string {
+	if settings.Xray.AccessLog == "file" {
+		return config.AccessLogPath()
+	}
+	return "none"
+}
+
 // GenerateXrayConfig creates a full xray config from a profile and settings.
 func GenerateXrayConfig(profile *config.Profile, settings *config.Settings) (*XrayConfig, error) {
 	socksSettings, _ := json.Marshal(map[string]interface{}{
@@ -606,7 +616,7 @@ func GenerateXrayConfig(profile *config.Profile, settings *config.Settings) (*Xr
 	cfg := &XrayConfig{
 		Log: XrayLog{
 			LogLevel: settings.Xray.LogLevel,
-			Access:   config.AccessLogPath(),
+			Access:   accessLogTarget(settings),
 			Error:    config.ErrorLogPath(),
 		},
 		API: &XrayAPI{

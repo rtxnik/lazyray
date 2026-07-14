@@ -18,12 +18,16 @@ Export a proxy profile as its protocol URL (VLESS, VMess, or Trojan). Without ar
 	Export all profiles
 
 .PP
-\fB--encrypt\fP=""
-	Export all profiles encrypted with password
+\fB--encrypt\fP[=false]
+	Export all profiles encrypted (passphrase from --passphrase-file, LAZYRAY_PASSPHRASE, or prompt)
 
 .PP
 \fB-h\fP, \fB--help\fP[=false]
 	help for export
+
+.PP
+\fB--passphrase-file\fP=""
+	Read the encryption passphrase from the first line of this file
 
 .PP
 \fB--qr\fP[=false]
@@ -36,7 +40,7 @@ Export a proxy profile as its protocol URL (VLESS, VMess, or Trojan). Without ar
   lzr export home
   lzr export --all
   lzr export --qr
-  lzr export --encrypt "passphrase"
+  lzr export --encrypt
 .EE
 
 

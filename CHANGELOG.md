@@ -28,6 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `releases/latest` (used by `scripts/install.sh` and `lzr self-update`) never
   resolves to a rehearsal build.
 
+### Security
+- `lzr export --encrypt` and `lzr import --decrypt` no longer take the passphrase as a flag value; supply it via `--passphrase-file`, the `LAZYRAY_PASSPHRASE` environment variable, or the interactive prompt, so it no longer appears in `ps` or shell history. Import URLs can be read from stdin with `-` (e.g. `lzr import -`, `lzr import --sub -`), and the subscription progress line is redacted to scheme and host.
+- The updater bounds each extracted archive member against a size cap (decompression-bomb defense) and removes a partially written member on rejection; `lzr config backup` opens its source files with `O_NOFOLLOW`, so a symlinked config path can no longer redirect the backup to off-path data.
+- macOS notification text is escaped before it reaches `osascript` (no AppleScript string breakout), and the `xattr` helper is resolved to a trusted absolute path — refusing a binary reached through a world-writable, non-sticky `PATH` directory — instead of a bare name.
+- The SSH tunnel resolves `ssh` the same secure way (refusing to run one from a world-writable `PATH` entry) and sets `ExitOnForwardFailure=yes`, so a local forward-bind collision makes ssh exit cleanly instead of lingering as a connected-but-dead tunnel.
+- Control-plane fetches (subscription, update checks and downloads, self-update, direct exit-IP) no longer honor an ambient `HTTP(S)_PROXY`, so the pinned-IP SSRF guard stays authoritative for these requests.
+- The xray access log (which records browsing destinations) is off by default; enable it with `xray.accessLog: file`. On start, log files are created and kept at `0600`, existing and archived logs are tightened, and the on-disk access-log setting is reconciled so an upgraded install honors the new default immediately.
+- `lzr doctor` now checks permissions on `lazyray.yaml`, `stats.json`, the config/data/log/backup directories, and any backup archive — not just the three core files — so a loose backup (which bundles proxy credentials) is flagged.
+- Exporting a profile to the clipboard from the TUI auto-clears the clipboard after 45s — only if it still holds the copied value — so a credential does not linger in the shared clipboard indefinitely.
+
 ### Fixed
 - The post-release verification workflow now triggers off the completed
   `Release` run (plus a manual dispatch fallback): releases published with the

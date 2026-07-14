@@ -339,6 +339,7 @@ graph TD
     config[config]
     fsutil[fsutil]
     procutil[procutil]
+    execsafe[execsafe]
     platform[platform]
     theme[tui/theme]
     notify[tui/notify]
@@ -358,9 +359,11 @@ graph TD
     cmd[cmd]
 
     platform --> config
+    platform --> execsafe
     config --> fsutil
     procutil --> fsutil
     core --> config
+    core --> execsafe
     core --> fsutil
     core --> platform
     core --> procutil

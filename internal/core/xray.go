@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/rtxnik/lazyray/internal/config"
+	"github.com/rtxnik/lazyray/internal/fsutil"
 	"github.com/rtxnik/lazyray/internal/platform"
 	"github.com/rtxnik/lazyray/internal/procutil"
 )
@@ -75,7 +76,7 @@ func (x *XrayProcess) startLocked() error {
 		return err
 	}
 
-	RotateLogs(settings)
+	PrepareLogsForStart(settings)
 
 	if err := checkPortAvailable(settings.Local.Listen, settings.Local.SocksPort); err != nil {
 		return fmt.Errorf("SOCKS5 port %d: %w", settings.Local.SocksPort, err)
@@ -128,7 +129,7 @@ func (x *XrayProcess) StartDetached() (int, error) {
 		return 0, err
 	}
 
-	RotateLogs(settings)
+	PrepareLogsForStart(settings)
 
 	if err := checkPortAvailable(settings.Local.Listen, settings.Local.SocksPort); err != nil {
 		return 0, fmt.Errorf("SOCKS5 port %d: %w", settings.Local.SocksPort, err)
@@ -371,6 +372,63 @@ func RotateLogs(settings *config.Settings) {
 	for _, logPath := range []string{config.AccessLogPath(), config.ErrorLogPath()} {
 		rotateFile(logPath, maxBytes)
 	}
+}
+
+// PrepareLogsForStart applies the full log policy in the correct order and MUST
+// be called by every xray start path (both core.XrayProcess.Start/StartDetached
+// and the lifecycle supervisor, which launches xray directly): reconcile the
+// on-disk access setting and tighten existing/archived logs, then rotate, then
+// pre-create the enabled logs 0600.
+func PrepareLogsForStart(settings *config.Settings) {
+	_ = enforceLogPolicy(settings)
+	RotateLogs(settings)
+	ensureLogFile(config.ErrorLogPath())
+	if settings.Xray.AccessLog == "file" {
+		ensureLogFile(config.AccessLogPath())
+	}
+}
+
+// enforceLogPolicy makes the on-disk logging state match the current settings
+// before xray launches. GenerateXrayConfig runs only at import/switch, and start
+// reads the existing config without regenerating, so the access-log setting is
+// reconciled into the on-disk config here (otherwise the privacy default would
+// never reach an already-generated config). It also tightens existing and
+// archived log files to 0600 BEFORE rotation rolls them, so a rotated archive
+// inherits the tight mode and logs archived by earlier runs are covered too.
+// Best-effort: individual failures are non-fatal to startup.
+func enforceLogPolicy(settings *config.Settings) error {
+	want := accessLogTarget(settings)
+	if raw, err := os.ReadFile(config.XrayConfigPath()); err == nil {
+		var cfg XrayConfig
+		if json.Unmarshal(raw, &cfg) == nil && cfg.Log.Access != want {
+			cfg.Log.Access = want
+			if out, err := json.MarshalIndent(&cfg, "", "  "); err == nil {
+				_ = fsutil.WriteFile(config.XrayConfigPath(), out, 0o600)
+			}
+		}
+	}
+	logDir := config.LogDir()
+	if entries, err := os.ReadDir(logDir); err == nil {
+		prefixes := []string{filepath.Base(config.AccessLogPath()), filepath.Base(config.ErrorLogPath())}
+		for _, e := range entries {
+			for _, pfx := range prefixes {
+				if strings.HasPrefix(e.Name(), pfx) {
+					_ = os.Chmod(filepath.Join(logDir, e.Name()), 0o600)
+					break
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// ensureLogFile creates path 0600 if absent and tightens it if it already exists
+// (O_CREATE alone does not chmod a pre-existing looser file).
+func ensureLogFile(path string) {
+	if f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+		_ = f.Close()
+	}
+	_ = os.Chmod(path, 0o600)
 }
 
 func rotateFile(path string, maxBytes int64) {

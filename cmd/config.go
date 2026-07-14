@@ -246,11 +246,16 @@ var configBackupCmd = &cobra.Command{
 		gw := gzip.NewWriter(&buf)
 		tw := tar.NewWriter(gw)
 		for _, file := range files {
-			data, err := os.ReadFile(file.path)
+			src, err := openNoFollow(file.path)
 			if err != nil {
 				if os.IsNotExist(err) {
 					continue
 				}
+				return fmt.Errorf("opening %s: %w", file.name, err)
+			}
+			data, err := io.ReadAll(src)
+			_ = src.Close()
+			if err != nil {
 				return fmt.Errorf("reading %s: %w", file.name, err)
 			}
 			hdr := &tar.Header{

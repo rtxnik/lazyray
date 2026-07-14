@@ -30,9 +30,10 @@ func routingProfile() config.Profile {
 
 func TestImportEncrypted_DropsRoutingByDefault(t *testing.T) {
 	isolateConfig(t)
-	importDecrypt = "pw"
+	importDecrypt = true
 	importAllowRouting = false
-	t.Cleanup(func() { importDecrypt = ""; importAllowRouting = false })
+	t.Setenv("LAZYRAY_PASSPHRASE", "pw")
+	t.Cleanup(func() { importDecrypt = false; importAllowRouting = false })
 
 	if err := importEncrypted(&cobra.Command{}, encBlob(t, []config.Profile{routingProfile()})); err != nil {
 		t.Fatal(err)
@@ -50,9 +51,10 @@ func TestImportEncrypted_AllowRoutingRejectsBadDNS(t *testing.T) {
 	isolateConfig(t)
 	p := routingProfile()
 	p.Routing.DNSRules = []config.DNSRule{{Server: "file:///etc/passwd"}}
-	importDecrypt = "pw"
+	importDecrypt = true
 	importAllowRouting = true
-	t.Cleanup(func() { importDecrypt = ""; importAllowRouting = false })
+	t.Setenv("LAZYRAY_PASSPHRASE", "pw")
+	t.Cleanup(func() { importDecrypt = false; importAllowRouting = false })
 
 	if err := importEncrypted(&cobra.Command{}, encBlob(t, []config.Profile{p})); err != nil {
 		t.Fatal(err)

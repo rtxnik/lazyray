@@ -9,6 +9,7 @@ import (
 	"text/template"
 
 	"github.com/rtxnik/lazyray/internal/config"
+	"github.com/rtxnik/lazyray/internal/execsafe"
 )
 
 type darwinPlatform struct{}
@@ -97,12 +98,16 @@ func (d *darwinPlatform) Notify(title, message string) error {
 	if path, err := exec.LookPath("terminal-notifier"); err == nil {
 		return exec.Command(path, "-title", title, "-message", message, "-group", "lazyray").Run()
 	}
-	script := fmt.Sprintf(`display notification "%s" with title "%s"`, message, title)
+	script := fmt.Sprintf(`display notification "%s" with title "%s"`, escapeAppleScript(message), escapeAppleScript(title))
 	return exec.Command("osascript", "-e", script).Run()
 }
 
 func (d *darwinPlatform) ClearQuarantine(path string) error {
-	return exec.Command("xattr", "-cr", path).Run()
+	xattrPath, err := execsafe.SecureLookPath("xattr")
+	if err != nil {
+		return nil // best-effort: skip the strip rather than fail the caller
+	}
+	return exec.Command(xattrPath, "-cr", path).Run()
 }
 
 func (d *darwinPlatform) OpenURL(url string) error {

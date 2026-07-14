@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/rtxnik/lazyray/internal/config"
+	"github.com/rtxnik/lazyray/internal/execsafe"
 	"github.com/rtxnik/lazyray/internal/fsutil"
 	"github.com/rtxnik/lazyray/internal/procutil"
 )
@@ -40,15 +41,22 @@ type tunnel struct {
 // survives after the CLI process exits (cross-session recovery). buildSSHArgs
 // produces a plain `ssh -N -L …` with no child-spawning options, so the leader
 // pid is the whole tunnel.
-func newSSHCmd(args []string) *exec.Cmd {
-	cmd := exec.Command("ssh", args...)
+func newSSHCmd(args []string) (*exec.Cmd, error) {
+	sshPath, err := execsafe.SecureLookPath("ssh")
+	if err != nil {
+		return nil, fmt.Errorf("locating ssh: %w", err)
+	}
+	cmd := exec.Command(sshPath, args...)
 	cmd.SysProcAttr = detachedProcAttr()
-	return cmd
+	return cmd, nil
 }
 
 // startSSHProcess launches the tunnel child process. Seam for tests.
 var startSSHProcess = func(args []string) (*exec.Cmd, error) {
-	cmd := newSSHCmd(args)
+	cmd, err := newSSHCmd(args)
+	if err != nil {
+		return nil, err
+	}
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
@@ -324,6 +332,7 @@ func buildSSHArgs(profile *config.Profile, localPort int, knownHostsPath string,
 		"-o", "HostKeyAlgorithms=" + strings.Join(algos, ","),
 		"-o", "ServerAliveInterval=30",
 		"-o", "ServerAliveCountMax=3",
+		"-o", "ExitOnForwardFailure=yes",
 		"-N",
 		"--",
 		fmt.Sprintf("%s@%s", profile.SSH.User, profile.SSH.Host),

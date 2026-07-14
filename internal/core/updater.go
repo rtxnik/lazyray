@@ -554,12 +554,39 @@ func extractFromZip(zipPath, targetName, dest string) error {
 			}
 			defer out.Close()
 
-			_, err = io.Copy(out, rc)
-			return err
+			if err := copyCapped(out, rc, maxXrayMemberBytes); err != nil {
+				_ = out.Close()
+				_ = os.Remove(dest) // drop the partial (possibly cap-sized) write
+				return err
+			}
+			return nil
 		}
 	}
 
 	return fmt.Errorf("%s not found in archive", targetName)
+}
+
+// maxXrayMemberBytes caps a single extracted archive member. Real members (the
+// xray binary, geoip/geosite) are far smaller; the cap defends against a
+// decompression bomb without trusting the archive's declared size.
+const maxXrayMemberBytes = 512 << 20
+
+// ErrXrayMemberTooLarge reports an archive member that exceeds the extract cap.
+var ErrXrayMemberTooLarge = errors.New("archive member exceeds size cap")
+
+// copyCapped copies src to dst, refusing more than cap bytes (decompression-bomb
+// guard). It reads one byte past the cap so an exactly-cap member (ok) is
+// distinguished from an oversize one (ErrXrayMemberTooLarge).
+func copyCapped(dst io.Writer, src io.Reader, cap int64) error {
+	n, err := io.CopyN(dst, src, cap+1)
+	if errors.Is(err, io.EOF) {
+		return nil // fit within the cap
+	}
+	if err != nil {
+		return err
+	}
+	_ = n
+	return ErrXrayMemberTooLarge
 }
 
 // copyFile copies src to dst atomically: it streams into a temp file in dst's

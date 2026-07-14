@@ -52,9 +52,10 @@ func TestImportEncrypted_SkipsBadTopLevelPort(t *testing.T) {
 	isolateConfig(t)
 	p := validImportBase()
 	p.Server.Port = 70000
-	importDecrypt = "pw"
+	importDecrypt = true
 	importAllowRouting = false
-	t.Cleanup(func() { importDecrypt = ""; importAllowRouting = false })
+	t.Setenv("LAZYRAY_PASSPHRASE", "pw")
+	t.Cleanup(func() { importDecrypt = false; importAllowRouting = false })
 	if err := importEncrypted(&cobra.Command{}, encExport(t, p)); err != nil {
 		t.Fatal(err)
 	}
@@ -68,9 +69,10 @@ func TestImportEncrypted_SkipsBadChainPort(t *testing.T) {
 	isolateConfig(t)
 	p := validImportBase()
 	p.Chain = []config.ServerConfig{{Address: "c.example", Port: 70000, Transport: config.TransportConfig{Network: "tcp"}}}
-	importDecrypt = "pw"
+	importDecrypt = true
 	importAllowRouting = false
-	t.Cleanup(func() { importDecrypt = ""; importAllowRouting = false })
+	t.Setenv("LAZYRAY_PASSPHRASE", "pw")
+	t.Cleanup(func() { importDecrypt = false; importAllowRouting = false })
 	if err := importEncrypted(&cobra.Command{}, encExport(t, p)); err != nil {
 		t.Fatal(err)
 	}

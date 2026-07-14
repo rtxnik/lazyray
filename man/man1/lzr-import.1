@@ -18,8 +18,8 @@ Import a single proxy URL (VLESS, VMess, Trojan, Shadowsocks, Hysteria2) into a 
 	Honor routing/DNS overrides carried by an encrypted import (validated against an allowlist)
 
 .PP
-\fB--decrypt\fP=""
-	Decrypt encrypted export with password
+\fB--decrypt\fP[=false]
+	Decrypt an encrypted export (passphrase from --passphrase-file, LAZYRAY_PASSPHRASE, or prompt)
 
 .PP
 \fB-f\fP, \fB--force\fP[=false]
@@ -34,8 +34,12 @@ Import a single proxy URL (VLESS, VMess, Trojan, Shadowsocks, Hysteria2) into a 
 	Profile name (default: from URL fragment)
 
 .PP
+\fB--passphrase-file\fP=""
+	Read the decryption passphrase from the first line of this file
+
+.PP
 \fB--sub\fP=""
-	Import from subscription URL
+	Import from subscription URL ('-' reads the URL from stdin)
 
 
 .SH EXAMPLE
