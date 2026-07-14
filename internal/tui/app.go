@@ -83,6 +83,19 @@ type updateCheckResultMsg struct {
 }
 type trafficTickMsg time.Time
 type clearTailMsg struct{ id uint64 }
+
+// clipboardClearAfter is how long a credential copied to the clipboard lingers
+// before the auto-clear fires.
+const clipboardClearAfter = 45 * time.Second
+
+// Clipboard seams so tests can drive copy/read without a system clipboard.
+var (
+	clipboardWrite = clipboard.WriteAll
+	clipboardRead  = clipboard.ReadAll
+)
+
+// clearClipboardMsg triggers a generation-guarded clipboard auto-clear.
+type clearClipboardMsg struct{ gen uint64 }
 type editorFinishedMsg struct{ err error }
 type resizeDebounceMsg struct{ seq int }
 type shutdownCompleteMsg struct{}
@@ -129,6 +142,10 @@ type App struct {
 	tunnels  *core.TunnelManager
 	version  string
 	svc      *appsvc.Service
+
+	// Clipboard auto-clear generation guard.
+	clipboardGen    uint64
+	clipboardCopied string
 
 	// Dimensions
 	width    int
@@ -667,6 +684,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.activeTail = nil
 		}
 		return a, nil
+
+	case clearClipboardMsg:
+		return a, a.handleClearClipboard(msg)
 
 	case editorFinishedMsg:
 		if msg.err != nil {
@@ -1515,10 +1535,41 @@ func (a *App) exportProfile() tea.Cmd {
 	}
 
 	proxyURL := core.ToProxyURL(profile)
-	if err := clipboard.WriteAll(proxyURL); err != nil {
+	clearCmd, ok := a.copyToClipboard(proxyURL)
+	if !ok {
 		return a.setMessage(fmt.Sprintf("exported %s (clipboard unavailable)", profile.Name))
 	}
-	return a.setMessage(fmt.Sprintf("exported %s to clipboard", profile.Name))
+	return tea.Batch(a.setMessage(fmt.Sprintf("exported %s to clipboard (clears in 45s)", profile.Name)), clearCmd)
+}
+
+// copyToClipboard writes value and, on success, records the generation and
+// returns the generation-guarded auto-clear tick so a copied credential does not
+// linger in the shared clipboard indefinitely. ok is false if the clipboard is
+// unavailable.
+func (a *App) copyToClipboard(value string) (tea.Cmd, bool) {
+	if err := clipboardWrite(value); err != nil {
+		return nil, false
+	}
+	a.clipboardGen++
+	a.clipboardCopied = value
+	gen := a.clipboardGen
+	return tea.Tick(clipboardClearAfter, func(time.Time) tea.Msg {
+		return clearClipboardMsg{gen: gen}
+	}), true
+}
+
+// handleClearClipboard clears the clipboard only if this tick is the latest copy
+// and the clipboard still holds the copied value (never clobber a later copy).
+func (a *App) handleClearClipboard(msg clearClipboardMsg) tea.Cmd {
+	if msg.gen != a.clipboardGen {
+		return nil
+	}
+	if cur, err := clipboardRead(); err != nil || cur != a.clipboardCopied {
+		return nil
+	}
+	_ = clipboardWrite("")
+	a.clipboardCopied = ""
+	return nil
 }
 
 func (a *App) showEditModal(profile *config.Profile) tea.Cmd {

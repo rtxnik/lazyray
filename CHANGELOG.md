@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Control-plane fetches (subscription, update checks and downloads, self-update, direct exit-IP) no longer honor an ambient `HTTP(S)_PROXY`, so the pinned-IP SSRF guard stays authoritative for these requests.
 - The xray access log (which records browsing destinations) is off by default; enable it with `xray.accessLog: file`. On start, log files are created and kept at `0600`, existing and archived logs are tightened, and the on-disk access-log setting is reconciled so an upgraded install honors the new default immediately.
 - `lzr doctor` now checks permissions on `lazyray.yaml`, `stats.json`, the config/data/log/backup directories, and any backup archive — not just the three core files — so a loose backup (which bundles proxy credentials) is flagged.
+- Exporting a profile to the clipboard from the TUI auto-clears the clipboard after 45s — only if it still holds the copied value — so a credential does not linger in the shared clipboard indefinitely.
 
 ### Fixed
 - The post-release verification workflow now triggers off the completed
