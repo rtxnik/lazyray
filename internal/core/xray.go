@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -186,20 +187,18 @@ func (x *XrayProcess) stopLocked() error {
 		return nil
 	}
 
-	// Try PID file first, then fallback to process search
+	// Only a PID this manager itself recorded (readPIDFile) may be signalled.
+	// findXrayPID (pgrep) stays diagnostics-only (IsRunning/status) and is NOT
+	// a kill target: it cannot tell our detached xray from the supervisor's.
 	pid := readPIDFile()
 	if pid == 0 {
-		pid = findXrayPID()
+		return errXrayNotOwned
 	}
-	if pid == 0 {
-		return fmt.Errorf("xray is not running")
-	}
-
 	if !isOurXray(pid) {
-		// Stale or reused PID: the recorded xray is gone. Drop the pidfile and
-		// report not-running rather than signalling an unrelated process.
+		// Stale/reused PID: recorded xray is gone. Drop the pidfile, report
+		// not-running rather than signalling an unrelated process.
 		removePIDFile()
-		return fmt.Errorf("xray is not running")
+		return errXrayNotOwned
 	}
 
 	// Non-child: poll-and-escalate (procutil), not proc.Wait() which cannot
@@ -747,6 +746,12 @@ func readPIDFile() int {
 func removePIDFile() {
 	_ = os.Remove(config.PIDFilePath())
 }
+
+// errXrayNotOwned means no xray recorded by THIS manager is running. A
+// pgrep-discovered process is diagnostics-only and never a termination target,
+// so with no self-recorded PID we refuse rather than signal a process the
+// lifecycle supervisor may own.
+var errXrayNotOwned = errors.New("xray is not running")
 
 func checkPortAvailable(host string, port int) error {
 	addr := net.JoinHostPort(host, strconv.Itoa(port))

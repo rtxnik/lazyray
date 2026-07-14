@@ -158,26 +158,46 @@ type Asset struct {
 	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
-// CheckUpdate fetches the xray-core release pinned to the given version tag
-// (e.g. "v26.3.27") via /releases/tags/<version>.
-func CheckUpdate(version string) (*ReleaseInfo, error) {
+// withRetry runs fn up to attempts times with linear backoff (backoff, 2*backoff,
+// ...) between tries. Returns nil on the first success, else the last error.
+func withRetry(attempts int, backoff time.Duration, fn func() error) error {
+	var lastErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * backoff)
+		}
+		if err := fn(); err != nil {
+			lastErr = err
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("failed after %d attempts: %w", attempts, lastErr)
+}
+
+// fetchRelease GETs a GitHub release payload (SSRF-guarded, 1 MB cap) and decodes
+// it. ctxLabel preserves each caller's observable error wording.
+func fetchRelease(url, ctxLabel string) (*ReleaseInfo, error) {
 	client := directClient(15 * time.Second)
-	resp, err := safeGet(context.Background(), client, xrayReleaseAPIURL(version), 1<<20)
+	resp, err := safeGet(context.Background(), client, url, 1<<20)
 	if err != nil {
-		return nil, fmt.Errorf("checking for updates: %w", err)
+		return nil, fmt.Errorf("checking for %s: %w", ctxLabel, err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
 	}
-
 	var release ReleaseInfo
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
 		return nil, fmt.Errorf("parsing release info: %w", err)
 	}
-
 	return &release, nil
+}
+
+// CheckUpdate fetches the xray-core release pinned to the given version tag
+// (e.g. "v26.3.27") via /releases/tags/<version>.
+func CheckUpdate(version string) (*ReleaseInfo, error) {
+	return fetchRelease(xrayReleaseAPIURL(version), "updates")
 }
 
 // AssetName returns the expected asset filename for the current platform.
@@ -309,12 +329,13 @@ func ApplyUpdate(xrayProc *XrayProcess, release *ReleaseInfo, downloadURL string
 	// file changes concurrently.
 	var backups []fileBackup
 	if backup {
+		ts := time.Now().Format("20060102-150405") // one token for the whole set
 		for _, name := range filesToExtract {
 			dst := filepath.Join(destDir, name)
 			if _, statErr := os.Stat(dst); statErr != nil {
 				continue
 			}
-			bpath := filepath.Join(config.BackupDir(), fmt.Sprintf("%s.%s.bak", name, time.Now().Format("20060102-150405")))
+			bpath := filepath.Join(config.BackupDir(), fmt.Sprintf("%s.%s.bak", name, ts))
 			sum, err := copyFileWithHash(dst, bpath)
 			if err != nil {
 				return fmt.Errorf("creating backup for %s: %w", name, err)
@@ -496,18 +517,10 @@ func assertNotWorldWritable(dir string) error {
 }
 
 func downloadFile(url, dest string) error {
-	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
-		if attempt > 0 {
-			time.Sleep(time.Duration(attempt*2) * time.Second)
-		}
-		if err := downloadFileOnce(url, dest); err != nil {
-			lastErr = err
-			continue
-		}
-		return nil
+	if err := withRetry(3, 2*time.Second, func() error { return downloadFileOnce(url, dest) }); err != nil {
+		return fmt.Errorf("download %w", err) // preserve "download failed after N attempts"
 	}
-	return fmt.Errorf("download failed after 3 attempts: %w", lastErr)
+	return nil
 }
 
 func downloadFileOnce(url, dest string) error {

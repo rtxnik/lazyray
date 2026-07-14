@@ -451,6 +451,54 @@ func TestRestoreVerifiedBackup(t *testing.T) {
 	}
 }
 
+// downloadToTemp must survive a transient failure (retry), matching the xray
+// updater. RED pre-refactor (single attempt aborts on the first failure).
+func TestDownloadToTemp_RetriesTransient(t *testing.T) {
+	// Allow the loopback httptest server through the SSRF guard (same seams as
+	// TestApplySelfUpdate in this package).
+	origLookup := lookupIP
+	lookupIP = func(string) ([]net.IP, error) { return []net.IP{net.ParseIP("93.184.216.34")}, nil }
+	t.Cleanup(func() { lookupIP = origLookup })
+	origDial := dialContext
+	dialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, network, addr)
+	}
+	t.Cleanup(func() { dialContext = origDial })
+
+	var hits int
+	// safeGet is https-only, so serve TLS (same seam as TestApplySelfUpdate):
+	// point directClient's TLS pool at this server's self-signed cert.
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		if hits < 2 {
+			w.WriteHeader(http.StatusBadGateway) // transient
+			return
+		}
+		_, _ = w.Write([]byte("payload"))
+	}))
+	defer srv.Close()
+
+	pool := x509.NewCertPool()
+	pool.AddCert(srv.Certificate())
+	origTLSConfig := directTLSConfig
+	directTLSConfig = &tls.Config{RootCAs: pool}
+	t.Cleanup(func() { directTLSConfig = origTLSConfig })
+
+	path, err := downloadToTemp(t.TempDir(), "x-*", srv.URL)
+	if err != nil {
+		t.Fatalf("downloadToTemp after retry: %v", err)
+	}
+	defer os.Remove(path)
+	if hits < 2 {
+		t.Fatalf("expected a retry (>=2 hits), got %d", hits)
+	}
+	b, _ := os.ReadFile(path)
+	if string(b) != "payload" {
+		t.Fatalf("payload = %q", b)
+	}
+}
+
 func makeZip(t *testing.T, name string, content []byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer

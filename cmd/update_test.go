@@ -1,6 +1,37 @@
 package cmd
 
-import "testing"
+import (
+	"errors"
+	"testing"
+
+	"github.com/rtxnik/lazyray/internal/app"
+	"github.com/rtxnik/lazyray/internal/config"
+	"github.com/rtxnik/lazyray/internal/core"
+)
+
+func TestUpdateApply_RoutesThroughService_AndRefusesWhenSupervised(t *testing.T) {
+	orig := applyXrayUpdate
+	t.Cleanup(func() { applyXrayUpdate = orig })
+
+	called := false
+	applyXrayUpdate = func(_ *core.XrayProcess, _ *core.ReleaseInfo, _ string,
+		_ *config.Settings, _, _ bool) error {
+		called = true
+		return app.ErrSupervisorRunning
+	}
+
+	err := runUpdateApply(&core.ReleaseInfo{TagName: "v99.9.9"}, "http://example/x.zip",
+		config.DefaultSettings(), false, false)
+	if !called {
+		t.Error("apply did not route through applyXrayUpdate")
+	}
+	// The supervised refusal must map to a non-zero ExitError, not fall through
+	// to xrayMissingError — covers the errors.Is(ErrSupervisorRunning) branch.
+	var ee *ExitError
+	if !errors.As(err, &ee) || ee.Code != ExitConfig {
+		t.Errorf("supervised refusal = %v, want *ExitError{Code: ExitConfig}", err)
+	}
+}
 
 func TestXrayUpdateDecision(t *testing.T) {
 	cases := []struct {
