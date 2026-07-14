@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - macOS notification text is escaped before it reaches `osascript` (no AppleScript string breakout), and the `xattr` helper is resolved to a trusted absolute path — refusing a binary reached through a world-writable, non-sticky `PATH` directory — instead of a bare name.
 - The SSH tunnel resolves `ssh` the same secure way (refusing to run one from a world-writable `PATH` entry) and sets `ExitOnForwardFailure=yes`, so a local forward-bind collision makes ssh exit cleanly instead of lingering as a connected-but-dead tunnel.
 - Control-plane fetches (subscription, update checks and downloads, self-update, direct exit-IP) no longer honor an ambient `HTTP(S)_PROXY`, so the pinned-IP SSRF guard stays authoritative for these requests.
+- The xray access log (which records browsing destinations) is off by default; enable it with `xray.accessLog: file`. On start, log files are created and kept at `0600`, existing and archived logs are tightened, and the on-disk access-log setting is reconciled so an upgraded install honors the new default immediately.
 
 ### Fixed
 - The post-release verification workflow now triggers off the completed

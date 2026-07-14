@@ -128,6 +128,7 @@ func (s *Supervisor) startXrayReal() (int, error) {
 	if err := core.WriteXrayConfig(s.Profile, s.Settings); err != nil {
 		return 0, err
 	}
+	core.PrepareLogsForStart(s.Settings)
 	cmd := exec.Command(config.XrayBinaryPath(), "run", "-c", config.XrayConfigPath())
 	cmd.SysProcAttr = xrayProcAttr()
 	if err := cmd.Start(); err != nil {

@@ -29,6 +29,7 @@ lazyray reads two YAML files from your config directory:
 | `autoRestart` | bool | `true` | restart xray on unexpected exit |
 | `logLevel` | string | `warning` | xray log level |
 | `maxLogSize` | int | `10` | log size (MB) that triggers rotation |
+| `accessLog` | string | `` (off) | write the xray access log to a file (set to `file`); default off keeps browsing destinations off disk |
 
 ### `health` — health checks
 

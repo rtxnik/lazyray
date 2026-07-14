@@ -51,6 +51,10 @@ type XraySettings struct {
 	AutoRestart bool   `yaml:"autoRestart"`
 	LogLevel    string `yaml:"logLevel"`
 	MaxLogSize  int    `yaml:"maxLogSize,omitempty"`
+	// AccessLog controls the xray access log, which records browsing
+	// destinations. Empty (the default) keeps it off for privacy; "file" writes
+	// it to the access-log path.
+	AccessLog string `yaml:"accessLog,omitempty"`
 }
 
 // HealthSettings holds health check settings.
