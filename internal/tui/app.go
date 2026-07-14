@@ -1676,7 +1676,7 @@ func (a *App) showQRModal(profile *config.Profile) tea.Cmd {
 }
 
 func (a *App) showUpdateModal() tea.Cmd {
-	m := modals.NewUpdateModal(a.xray, a.settings, a.width, a.height)
+	m := modals.NewUpdateModal(a.xray, a.settings, a.width, a.height, a.svc)
 	a.modal = m
 	a.modalID = ModalUpdate
 	return m.Init()

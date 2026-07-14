@@ -21,10 +21,18 @@ type updateApplyMsg struct {
 	err error
 }
 
+// updateApplier is the app-service seam the modal drives (satisfied by
+// *app.Service); kept as an interface so modals never imports internal/app.
+type updateApplier interface {
+	ApplyXrayUpdate(xray *core.XrayProcess, release *core.ReleaseInfo, url string,
+		s *config.Settings, allowUnverified, allowDowngrade bool) error
+}
+
 // UpdateModal handles xray-core updates.
 type UpdateModal struct {
 	xray     *core.XrayProcess
 	settings *config.Settings
+	svc      updateApplier
 	current  string
 	release  *core.ReleaseInfo
 	checking bool
@@ -38,10 +46,11 @@ type UpdateModal struct {
 }
 
 // NewUpdateModal creates a new update modal.
-func NewUpdateModal(xray *core.XrayProcess, settings *config.Settings, width, height int) *UpdateModal {
+func NewUpdateModal(xray *core.XrayProcess, settings *config.Settings, width, height int, svc updateApplier) *UpdateModal {
 	return &UpdateModal{
 		xray:     xray,
 		settings: settings,
+		svc:      svc,
 		current:  core.GetXrayVersion(),
 		checking: true,
 		width:    width,
@@ -76,7 +85,7 @@ func (m *UpdateModal) applyUpdate() tea.Cmd {
 			return updateApplyMsg{err: err}
 		}
 
-		if err := core.ApplyUpdate(m.xray, m.release, url, m.settings.Update.BackupBefore, false, false); err != nil {
+		if err := m.svc.ApplyXrayUpdate(m.xray, m.release, url, m.settings, false, false); err != nil {
 			return updateApplyMsg{err: err}
 		}
 
