@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - `lzr export --encrypt` and `lzr import --decrypt` no longer take the passphrase as a flag value; supply it via `--passphrase-file`, the `LAZYRAY_PASSPHRASE` environment variable, or the interactive prompt, so it no longer appears in `ps` or shell history. Import URLs can be read from stdin with `-` (e.g. `lzr import -`, `lzr import --sub -`), and the subscription progress line is redacted to scheme and host.
+- The updater bounds each extracted archive member against a size cap (decompression-bomb defense) and removes a partially written member on rejection; `lzr config backup` opens its source files with `O_NOFOLLOW`, so a symlinked config path can no longer redirect the backup to off-path data.
 
 ### Fixed
 - The post-release verification workflow now triggers off the completed
