@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/rtxnik/lazyray/internal/config"
@@ -29,6 +30,9 @@ func TestGenerateConfigAccessLogDefaultOff(t *testing.T) {
 }
 
 func TestEnforceLogPolicyReconcilesAndTightens(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file permissions")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	if err := config.EnsureDirs(); err != nil {
@@ -72,6 +76,9 @@ func TestEnforceLogPolicyReconcilesAndTightens(t *testing.T) {
 }
 
 func TestPrepareLogsForStartTightensAndDefaultsOff(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX file permissions")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	if err := config.EnsureDirs(); err != nil {
