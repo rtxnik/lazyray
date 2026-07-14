@@ -3,6 +3,8 @@ package doctor
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/rtxnik/lazyray/internal/config"
@@ -79,7 +81,13 @@ func checkFilePerms(_ context.Context, env *Env) Result {
 		return r
 	}
 	var loose []string
-	for _, path := range []string{env.StatePath, env.XrayConfigPath, env.ServersPath} {
+	for _, path := range []string{
+		env.StatePath, env.XrayConfigPath, env.ServersPath,
+		env.SettingsPath, env.StatsPath,
+	} {
+		if path == "" {
+			continue
+		}
 		fi, err := env.Stat(path)
 		if err != nil {
 			continue // absent file is fine; presence checks live in other groups
@@ -88,13 +96,42 @@ func checkFilePerms(_ context.Context, env *Env) Result {
 			loose = append(loose, fmt.Sprintf("%s (%o)", path, fi.Mode().Perm()))
 		}
 	}
+	for _, dir := range []string{env.ConfigDir, env.DataDir, env.LogDir, env.BackupDir} {
+		if dir == "" {
+			continue
+		}
+		fi, err := env.Stat(dir)
+		if err != nil {
+			continue
+		}
+		if fi.Mode().Perm()&0o077 != 0 {
+			loose = append(loose, fmt.Sprintf("%s dir (%o)", dir, fi.Mode().Perm()))
+		}
+	}
+	// Backup archives bundle proxy credentials; flag any that are group/world-readable.
+	if env.BackupDir != "" {
+		if entries, err := os.ReadDir(env.BackupDir); err == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					continue
+				}
+				fi, err := e.Info()
+				if err != nil {
+					continue
+				}
+				if fi.Mode().Perm()&0o077 != 0 {
+					loose = append(loose, fmt.Sprintf("%s (%o)", filepath.Join(env.BackupDir, e.Name()), fi.Mode().Perm()))
+				}
+			}
+		}
+	}
 	if len(loose) > 0 {
 		r.Severity = SeverityWarn
-		r.Detail = "world/group-readable sensitive files: " + join(loose)
-		r.Hint = "chmod 600 the listed files"
+		r.Detail = "world/group-readable sensitive paths: " + join(loose)
+		r.Hint = "chmod 600 the listed files and 700 the listed directories"
 		return r
 	}
 	r.Severity = SeverityOK
-	r.Detail = "state.json/config.json/servers.yaml are 0600 (or absent)"
+	r.Detail = "sensitive files are 0600, dirs 0700, backups 0600 (or absent)"
 	return r
 }
